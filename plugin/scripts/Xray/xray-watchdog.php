@@ -13,6 +13,7 @@
 
 set_include_path('/usr/local/etc/inc' . PATH_SEPARATOR . get_include_path());
 require_once('config.inc');
+require_once __DIR__ . '/xray-process.inc.php';
 
 define('XRAY_CTRL',    '/usr/local/opnsense/scripts/Xray/xray-service-control.php');
 define('WATCHDOG_LOG', '/var/log/xray-watchdog.log');
@@ -26,15 +27,9 @@ function wlog(string $msg): void
 
 function proc_alive(string $pidfile): bool
 {
-    if (!file_exists($pidfile)) {
-        return false;
-    }
-    $pid = (int)trim(file_get_contents($pidfile));
-    if ($pid <= 0) {
-        return false;
-    }
-    exec('/bin/kill -0 ' . $pid . ' 2>/dev/null', $o, $rc);
-    return $rc === 0;
+    $isXray = strpos(basename($pidfile), 'xray_core_') === 0;
+    $id = preg_replace('/^(xray_core_|tun2socks_)|\.pid$/', '', basename($pidfile));
+    return XrayProcess::alive($pidfile, $isXray ? '/usr/local/bin/xray-core' : '/usr/local/tun2socks/tun2socks', $isXray ? '/usr/local/etc/xray-core/config-' . $id . '.json' : '/usr/local/tun2socks/config-' . $id . '.yaml');
 }
 
 // ─── Читаем конфиг ────────────────────────────────────────────────────────────
@@ -64,14 +59,18 @@ if (!file_exists(XRAY_CTRL)) {
 
 // ─── Итерируем все инстансы ───────────────────────────────────────────────────
 $anyFailed = false;
+$activePath = '/usr/local/etc/xray-core/active.json';
+$active = is_file($activePath) ? json_decode(file_get_contents($activePath), true) : null;
+$activeUuid = $active['inst_uuid'] ?? '';
+if ($activeUuid === '') { exit(0); }
 
 foreach ($instances->instance as $inst) {
     $inst_uuid = (string)$inst['uuid'];
-    if ($inst_uuid === '') {
+    if ($inst_uuid !== $activeUuid || (string)($inst->enabled ?? '1') !== '1') {
         continue;
     }
 
-    $name = (string)($inst->name ?? $inst_uuid);
+    $name = $inst_uuid;
 
     // БАГ-5 FIX: если инстанс намеренно остановлен — не трогаем
     $stoppedFlag = "/var/run/xray_stopped_{$inst_uuid}.flag";
@@ -96,8 +95,8 @@ foreach ($instances->instance as $inst) {
 
     wlog("WATCHDOG [{$name}]: " . implode(', ', $died) . " not running — triggering restart");
 
-    exec('/usr/local/bin/php ' . escapeshellarg(XRAY_CTRL) . ' restart ' . escapeshellarg($inst_uuid) . ' 2>&1', $out, $rc);
-    $output = trim(implode("\n", $out));
+    exec('/usr/local/bin/php ' . escapeshellarg(XRAY_CTRL) . ' recover ' . escapeshellarg($inst_uuid) . ' 2>&1', $out, $rc);
+    $output = $rc === 0 ? 'recovered' : 'recovery failed';
 
     if ($rc === 0) {
         wlog("WATCHDOG [{$name}]: restart OK — " . ($output ?: 'no output'));

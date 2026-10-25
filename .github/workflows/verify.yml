@@ -1,0 +1,24 @@
+name: Verify source
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install PHP test runtime
+        run: sudo apt-get update && sudo apt-get install -y php-cli php-xml php-curl
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test

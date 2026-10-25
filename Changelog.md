@@ -5,6 +5,17 @@ Format: [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [4.0.0] - 2026-10-25
+
+- Full JSON profiles with a locally bundled CodeMirror 6 editor, unsaved validation, DNS runtime-copy toggle, JSON/URL/VLESS import and remarks selection.
+- Exact OPNSense subscription User-Agent, verified HTTPS, 2000 ms deadline, minute scheduler and draft-only updates.
+- Applied-route SOCKS HEAD/GET test with remote DNS, HTTP status and TTFB under a 1000 ms deadline.
+- One active tunnel, shared lifecycle lock, readiness checks, atomic writes, durable transition journal and rollback.
+- Watchdog/boot recover applied snapshots, never downloaded drafts. Correct tun2socks --config and OPNsense autocron registration.
+- Validated legacy conversion retaining source fields; private configuration storage and opaque API tickets.
+- Installer now requires separately installed core dependencies and does not download/replace them.
+- Added local PHP, browser, HTTPS/SOCKS, migration and lifecycle simulation checks. Native OPNsense/FreeBSD validation remains required.
+
 ## [3.0.1] - TBD
 ### Added
 - **Enabled field** — добавлено поле 'enable' которое позволяет включить/выключить инстанц из автозапуска/перезагрузки
@@ -335,3 +346,10 @@ Format: [Semantic Versioning](https://semver.org/).
 - Автозапуск через `rc.syshook.d/start/50-xray` и `plugins.inc.d/xray.inc`
 - Генерация `config.json` и `config.yaml` при каждом Apply
 - Статус xray-core и tun2socks в GUI
+
+### Heartbeat and scoped WAN bypass
+
+- Check the applied SOCKS using Cloudflare generate_204 (HTTP 204, 2000 ms), show component states, latency, history and stale data; selectable 15/30/60/120/300 second intervals.
+- Optional WAN bypass after one failed check, recovery after three successes, limited to explicitly enrolled firewall rules; ASN/CIDR destinations use a private native network alias.
+- Preserve existing gateways, monitoring, force_down, global default routes, system DNS, Unbound and shared rc.conf. No BIRD/DNSTAP dependencies.
+- Add rollback/state-machine/transport tests and opt-in isolated OPNsense system scripts; Debian runner read-only preflight over verified SSH. Target platform acceptance remains pending.

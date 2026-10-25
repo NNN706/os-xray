@@ -1,3 +1,7 @@
+<link rel="stylesheet" href="/assets/xray/editor.css">
+<script src="/assets/xray/editor.js"></script>
+<script src="/assets/xray/dialog.js"></script>
+<script src="/assets/xray/health.js"></script>
 {{ partial('OPNsense/Xray/partials/scripts') }}
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
