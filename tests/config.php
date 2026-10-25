@@ -46,9 +46,13 @@ $dir = sys_get_temp_dir() . '/xray-test-' . bin2hex(random_bytes(8)); mkdir($dir
 try {
     $cron = xray_cron();
     check(count($cron) === 3 && $cron[0]['autocron'][1] === '*' && $cron[1]['autocron'][1] === '*', 'OPNsense autocron format runs both checks every minute');
-    file_put_contents($dir.'/pid', (string)getmypid());
+    // Launch with the absolute executable path: PHP_BINARY can differ from a CLI alias on Linux.
+    $child=proc_open([PHP_BINARY, '-r', 'usleep(2000000);', 'tests/config.php'], [0=>['file','/dev/null','r'],1=>['file','/dev/null','w'],2=>['file','/dev/null','w']], $pipes);
+    if (!is_resource($child)) { throw new RuntimeException('Cannot start process identity fixture'); }
+    file_put_contents($dir.'/pid', (string)proc_get_status($child)['pid']);
     check(XrayProcess::alive($dir.'/pid', PHP_BINARY, 'tests/config.php'), 'Managed process identity matches binary and config');
     check(!XrayProcess::alive($dir.'/pid', '/not/the/binary', 'tests/config.php'), 'Reused or unrelated PID is rejected');
+    proc_terminate($child); proc_close($child);
     XrayConfig::atomic($dir.'/config', 'old'); XrayConfig::atomic($dir.'/config','new');
     check(file_get_contents($dir.'/config') === 'new' && (fileperms($dir.'/config') & 0777) === 0600, 'Atomic private file replacement');
     rejects(fn() => XrayConfig::validate($raw, true, '/does/not/exist'), 'Missing core fails validation');
