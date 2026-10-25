@@ -74,7 +74,10 @@ try {
                 } finally { flock($lock, LOCK_UN); fclose($lock); }
             } elseif ($lock) { fclose($lock); }
         }
-        if ($settings['interval'] >= 60) { break; }
+        // Keep waiting when a minute-aligned cron arrives just before the next check.
+        // Otherwise a 1 s request would turn a 60 s setting into a 120 s interval.
+        $nextAt = ($state['checked_at'] ?? time()) + $settings['interval'];
+        if (($nextAt - time()) * 1000000000 > $end - hrtime(true)) { break; }
         usleep(200000);
     } while (hrtime(true) < $end);
     echo "OK: heartbeat checked\n";
