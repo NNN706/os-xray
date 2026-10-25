@@ -56,9 +56,15 @@ final class XrayRouting
             $rc = XraySubscription::waitForRequest($proc, 2000); $closed = proc_close($proc);
             if (($rc < 0 ? $closed : $rc) !== 0 || filesize($file) > 16777216) { throw new RuntimeException('ASN lookup failed; previous routing retained'); }
             $json = json_decode(file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
-            if (($json['status'] ?? '') !== 'ok' || strtoupper((string)($json['data']['resource'] ?? '')) !== $asn) { throw new RuntimeException('Invalid ASN response'); }
-            return self::announced($json['data']);
+            return self::response($json, $asn);
         } finally { unlink($file); }
+    }
+    public static function response(array $json, string $asn): array
+    {
+        // RIPEstat returns resource as 3333 even when the query uses AS3333.
+        $resource = preg_replace('/^AS/i', '', (string)($json['data']['resource'] ?? ''));
+        if (($json['status'] ?? '') !== 'ok' || $resource !== preg_replace('/^AS/i', '', $asn)) { throw new RuntimeException('Invalid ASN response'); }
+        return self::announced($json['data']);
     }
     public static function announced(array $data): array
     {

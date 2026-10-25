@@ -29,6 +29,8 @@ $snapshot=['latest_time'=>'2026-10-26T10:00:00','prefixes'=>[
 ]];
 verify(XrayRouting::announced($snapshot)===['192.0.2.0/24'],'Withdrawn historical prefixes excluded from ASN snapshot');
 rejects(fn()=>XrayRouting::announced([]));
+verify(XrayRouting::response(['status'=>'ok','data'=>['resource'=>'64500']+$snapshot],'AS64500')===['192.0.2.0/24'],'RIPE numeric resource matches AS-prefixed input');
+rejects(fn()=>XrayRouting::response(['status'=>'ok','data'=>['resource'=>'64501']+$snapshot],'AS64500'));
 $lookups=[];
 $prefixes=XrayRouting::destinations('192.0.2.1/24,192.0.2.0/24','AS64500 64500',function($asn) use (&$lookups) { $lookups[]=$asn; return ['2001:db8::/32','192.0.2.0/24']; });
 verify($prefixes===['192.0.2.0/24','2001:db8::/32'],'ASN and CIDR combined without duplicates');
