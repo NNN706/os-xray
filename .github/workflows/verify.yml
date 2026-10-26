@@ -13,6 +13,8 @@ concurrency:
 jobs:
   build:
     name: Build and test
+    outputs:
+      artifact_id: ${{ steps.bundle.outputs.artifact-id }}
     # All PR code stays off the persistent runner, even PRs from this repository.
     runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || fromJSON('["self-hosted","linux","x64","os-xray-build"]') }}
     timeout-minutes: 25
@@ -55,9 +57,10 @@ jobs:
           else
             python3 scripts/release.py pack
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - id: bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: os-xray-${{ github.sha }}-${{ github.event_name }}
+          name: os-xray-${{ github.sha }}-${{ github.event_name }}-${{ github.run_attempt }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
@@ -75,8 +78,9 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: os-xray-${{ github.sha }}-${{ github.event_name }}
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: dist/
+          merge-multiple: true
       - name: Publish without overwriting assets
         env:
           GH_TOKEN: ${{ github.token }}
