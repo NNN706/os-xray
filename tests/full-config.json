@@ -1,0 +1,20 @@
+{
+  "remarks": "Balanced example",
+  "dns": {"servers": ["1.1.1.1"]},
+  "policy": {"levels": {"0": {"handshake": 4}}},
+  "inbounds": [
+    {"tag": "socks", "listen": "127.0.0.1", "port": 10808, "protocol": "socks", "settings": {"auth": "noauth", "udp": true}, "sniffing": {"enabled": true, "routeOnly": false, "destOverride": ["http", "tls", "quic"]}},
+    {"tag": "http", "listen": "127.0.0.1", "port": 10809, "protocol": "http", "settings": {}}
+  ],
+  "outbounds": [
+    {"tag": "proxy-a", "protocol": "freedom", "settings": {}},
+    {"tag": "proxy-b", "protocol": "freedom", "settings": {}},
+    {"tag": "block", "protocol": "blackhole", "settings": {}}
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [{"type": "field", "network": "tcp,udp", "balancerTag": "balance"}],
+    "balancers": [{"tag": "balance", "selector": ["proxy-"], "strategy": {"type": "leastLoad", "settings": {"expected": 2}}}]
+  },
+  "observatory": {"subjectSelector": ["proxy-"], "probeURL": "https://www.gstatic.com/generate_204", "probeInterval": "10m", "enableConcurrency": true}
+}

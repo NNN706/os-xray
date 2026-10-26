@@ -5,12 +5,12 @@
     <version>1.0.1</version>
     <items>
         <enabled type="BooleanField">
-            <default>0</default>
+            <Default>0</Default>
             <Required>N</Required>
         </enabled>
         <!-- E1: watchdog — автоперезапуск через cron при падении xray-core или tun2socks -->
         <watchdog_enabled type="BooleanField">
-            <default>0</default>
+            <Default>0</Default>
             <Required>N</Required>
         </watchdog_enabled>
     </items>
