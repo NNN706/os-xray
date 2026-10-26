@@ -19,7 +19,7 @@ Node.js 22 is supplied by setup-node in Actions. After checkout and `npm ci`, an
 sudo npx playwright install-deps chromium
 ```
 
-Run this only for this trusted checkout; normal CI uses `npx playwright install chromium` as the runner user without sudo. Browser downloads require outbound HTTPS. `scripts/preflight.mjs` reports missing executables, PHP version/modules/functions. The browser-launch step reports missing system libraries. CI never installs router packages or changes Unbound/DNS.
+Run this only for this trusted checkout; CI also checks missing PHP XML/browser libraries and prepares them if its account already has root or passwordless sudo. Otherwise it stops with the administrator command. Browser downloads use `npx playwright install chromium` as the runner user without sudo. Browser downloads require outbound HTTPS. `scripts/preflight.mjs` reports missing executables, PHP version/modules/functions. The browser-launch step reports missing system libraries. CI never installs router packages or changes Unbound/DNS.
 
 ## Local build
 

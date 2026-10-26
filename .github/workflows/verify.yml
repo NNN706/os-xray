@@ -27,6 +27,9 @@ jobs:
       - name: Prepare hosted PR runtime
         if: github.event_name == 'pull_request'
         run: sudo apt-get update && sudo apt-get install -y php-cli php-xml php-curl
+      - name: Prepare missing Debian runner PHP modules
+        if: github.event_name != 'pull_request'
+        run: sh scripts/prepare-runner.sh php
       - name: Check build prerequisites
         run: node scripts/preflight.mjs
       - run: npm ci
@@ -36,6 +39,9 @@ jobs:
       - name: Install runner browser (no sudo)
         if: github.event_name != 'pull_request'
         run: npx playwright install chromium
+      - name: Prepare missing Debian browser libraries
+        if: github.event_name != 'pull_request'
+        run: sh scripts/prepare-runner.sh browser
       - name: Check browser system libraries
         run: node -e 'require("playwright").chromium.launch({headless:true}).then(b=>b.close()).catch(e=>{console.error("Chromium cannot start. Install the Debian libraries listed in docs/BUILD.md.\n"+e.message);process.exit(1)})'
       - name: Build and test
