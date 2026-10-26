@@ -19,6 +19,7 @@ php)
         php_series=$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')
         case "$php_series" in [0-9].[0-9]) ;; *) echo 'Unsupported PHP version string' >&2; exit 1;; esac
         echo "Preparing missing PHP XML modules for PHP $php_series on the build host."
+        echo "Administrator setup, if required: sudo apt-get update && sudo apt-get install -y php${php_series}-xml"
         privileged apt-get update
         privileged apt-get install -y --no-install-recommends "php${php_series}-xml"
     fi
