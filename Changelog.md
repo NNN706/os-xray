@@ -1,3 +1,9 @@
+## 4.0.0-rc.1 — release packaging
+
+- Unified tested release pipeline and deterministic installation archive with checksums/source manifest.
+- Trusted builds run on Admiralteskiy; pull requests use GitHub-hosted workers. Existing assets are never silently replaced.
+- English and Russian installation guides, runner setup and explicit prerelease/OPNsense acceptance status.
+
 # Changelog — os-xray
 
 All notable changes to this project will be documented in this file.

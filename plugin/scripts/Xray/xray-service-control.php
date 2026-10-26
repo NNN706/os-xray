@@ -197,7 +197,7 @@ try {
     $profiles = XrayStore::profiles();
     if ($id !== '' && !isset($profiles[$id])) { throw new RuntimeException('Unknown profile'); }
     $old = active_profile();
-    if ($action === 'version') { echo json_encode(['version' => '4.0.0']); }
+    if ($action === 'version') { echo json_encode(['version' => trim(file_get_contents(is_file(__DIR__ . '/version.txt') ? __DIR__ . '/version.txt' : dirname(__DIR__, 3) . '/VERSION'))]); }
     elseif ($action === 'statusall') {
         $result = []; foreach ($profiles as $uuid => $c) { $result[$uuid] = status_profile($uuid, $c['name']); }
         echo json_encode($result);

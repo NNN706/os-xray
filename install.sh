@@ -2,10 +2,12 @@
 # Install the bundled plugin; dependencies and live tunnel changes are explicit.
 set -eu
 umask 077
-PLUGIN_VERSION="4.0.0"
+RELEASE_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PLUGIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/plugin"
 VERSION_FILE="/usr/local/opnsense/mvc/app/models/OPNsense/Xray/version.txt"
 die() { echo "ERROR: $*" >&2; exit 1; }
+[ -s "$RELEASE_ROOT/VERSION" ] || die "Extract the complete release archive before running install.sh (VERSION is missing)."
+PLUGIN_VERSION="$(cat "$RELEASE_ROOT/VERSION")"
 [ "$(id -u)" = 0 ] || die "Run this installer as root on OPNsense."
 [ -f /usr/local/etc/inc/config.inc ] || die "OPNsense configuration framework not found."
 
@@ -65,6 +67,7 @@ find /usr/local/etc/xray-core -maxdepth 1 -name 'config*.json' -type f -exec chm
 find /usr/local/tun2socks -maxdepth 1 -name 'config*.yaml' -type f -exec chmod 0600 {} +
 
 /usr/local/bin/php /usr/local/opnsense/scripts/Xray/xray-migrate.php || die "Migration failed; original source fields retained."
+install -m 0644 "$RELEASE_ROOT/VERSION" /usr/local/opnsense/scripts/Xray/version.txt
 echo "$PLUGIN_VERSION" > "$VERSION_FILE"
 chmod 0644 "$VERSION_FILE"
 service configd restart

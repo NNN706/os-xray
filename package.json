@@ -1,10 +1,12 @@
 {
   "name": "os-xray-json-editor",
   "private": true,
-  "version": "4.0.0",
+  "version": "4.0.0-rc.1",
   "scripts": {
     "build": "node frontend/build.mjs",
-    "test": "npm run build && node tests/check.mjs && node --test --test-concurrency=1 tests/*.test.mjs"
+    "test": "npm run build && node tests/check.mjs && node --test --test-concurrency=1 tests/*.test.mjs",
+    "release:pack": "python3 scripts/release.py pack",
+    "release:verify": "python3 scripts/release.py verify"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.0",

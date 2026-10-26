@@ -1,24 +1,87 @@
-name: Verify source
+name: Build, test and release
 on:
   push:
+    branches: [develop, 'feature/**', 'release/**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: os-xray-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
-  portable:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+  build:
+    name: Build and test
+    # All PR code stays off the persistent runner, even PRs from this repository.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || fromJSON('["self-hosted","linux","x64","os-xray-build"]') }}
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
           cache: npm
-      - name: Install PHP test runtime
+      - name: Prepare hosted PR runtime
+        if: github.event_name == 'pull_request'
         run: sudo apt-get update && sudo apt-get install -y php-cli php-xml php-curl
+      - name: Check build prerequisites
+        run: node scripts/preflight.mjs
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - name: Install hosted browser dependencies
+        if: github.event_name == 'pull_request'
+        run: npx playwright install --with-deps chromium
+      - name: Install runner browser (no sudo)
+        if: github.event_name != 'pull_request'
+        run: npx playwright install chromium
+      - name: Check browser system libraries
+        run: node -e 'require("playwright").chromium.launch({headless:true}).then(b=>b.close()).catch(e=>{console.error("Chromium cannot start. Install the Debian libraries listed in docs/BUILD.md.\n"+e.message);process.exit(1)})'
+      - name: Build and test
+        run: npm test
+      - name: Package and verify
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then
+            python3 scripts/release.py pack --tag "$RELEASE_TAG"
+          else
+            python3 scripts/release.py pack
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: os-xray-${{ github.sha }}-${{ github.event_name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+  publish:
+    name: Publish verified release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: os-xray-${{ github.sha }}-${{ github.event_name }}
+          path: dist/
+      - name: Publish without overwriting assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/publish-release.py
+      - name: Verify public release download
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir downloaded
+          for name in "os-xray-$RELEASE_TAG.tar.gz" SHA256SUMS manifest.json; do
+            curl --fail --silent --show-error --location --retry 3 --retry-delay 2 --output "downloaded/$name" "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$name"
+          done
+          python3 scripts/release.py verify --out downloaded --tag "$RELEASE_TAG"
