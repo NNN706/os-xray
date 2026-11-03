@@ -46,6 +46,15 @@ if [ "${1:-}" = --release ]; then
     /bin/sh "$stage/os-xray-$tag/install.sh"
     exit
 fi
+# Standalone entry point: install a pinned, verified bundle when run without plugin files.
+if [ "$#" = 0 ] && [ ! -f "$RELEASE_ROOT/VERSION" ]; then
+    new_stage
+    download 'https://codeload.github.com/NNN706/os-xray/tar.gz/a408aa82420c05f26c6555ee99144e0d0fe0539a' "$stage/os-xray.tar.gz"
+    verify_sha "$stage/os-xray.tar.gz" '7224f3809bbd577f14e35b582a1865776f617770a55cb336f167f0c69c6f27d3'
+    /usr/bin/tar -xzf "$stage/os-xray.tar.gz" -C "$stage" || die "Cannot extract plugin bundle."
+    /bin/sh "$stage/os-xray-a408aa82420c05f26c6555ee99144e0d0fe0539a/install.sh"
+    exit
+fi
 [ -s "$RELEASE_ROOT/VERSION" ] || die "Extract the complete release archive before running install.sh (VERSION is missing)."
 PLUGIN_VERSION="$(cat "$RELEASE_ROOT/VERSION")"
 
