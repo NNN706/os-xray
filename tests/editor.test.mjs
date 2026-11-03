@@ -32,6 +32,18 @@ test('CodeMirror full JSON editor in Chromium', async t => {
       assert.equal(await page.locator('.xray-dns-disabled').count(),0);
     });
     await t.test('DNS Off remains editable with incomplete JSON',async()=>{await page.evaluate(()=>{editor.setDns(false);editor.setValue('{"dn');});await page.waitForTimeout(100);await page.evaluate(value=>{editor.setValue(value);editor.setDns(true);},fixture);});
+    await t.test('DNS comma dims and long lines wrap without changing JSON', async()=>{
+      const result=await page.evaluate(()=>{
+        const previous=editor.getValue(), value='{"dns":{},"long":"'+ 'x'.repeat(1500)+'"}';
+        editor.setValue(value);editor.setDns(false);
+        const dimmed=Array.from(document.querySelectorAll('.xray-dns-disabled'),n=>n.textContent).join('');
+        const wrapping=editor.view.contentDOM.classList.contains('cm-lineWrapping');
+        const same=editor.getValue()===value;
+        editor.setValue(previous);editor.setDns(true);
+        return {dimmed,wrapping,same};
+      });
+      assert.match(result.dimmed, /,$/);assert.ok(result.wrapping && result.same);
+    });
     await t.test('repeated formatting of long routing lists does not create diagnostics', async () => {
       const count = await page.evaluate(() => {
         const original = editor.getValue();

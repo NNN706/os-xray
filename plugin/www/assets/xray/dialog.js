@@ -14,12 +14,18 @@ $(function () {
         editor.setDns(checked('use_config_dns'));
         const issues = editor.diagnostics();
         $('#xray-editor-diagnostics').text(issues.map(d => d.message).join('\n'));
-        const auto = checked('auto_update'), mode = get('update_mode');
-        field('subscription_url').closest('tr').toggle(Boolean(get('subscription_url')));
-        field('update_mode').closest('tr').toggle(auto);
-        field('update_hours').closest('tr').toggle(auto && mode === 'manual');
-        let metadata = {}; try { metadata = JSON.parse(get('subscription_metadata') || '{}'); } catch (_) { /* handled on save */ }
-        $('#xray-update-reason').text(auto && mode !== 'manual' && !metadata.interval_hours ? 'Missing or invalid positive profile-update-interval header; scheduled updates are disabled.' : (auto && !get('subscription_url') ? 'Import a subscription URL first.' : ''));
+        const hasSource = /^https:\/\/[^\s/]+/i.test(get('subscription_url').trim());
+        const $auto = field('auto_update');
+        if (!hasSource) $auto.prop('checked', false);
+        $auto.prop('disabled', !hasSource);
+        const auto = hasSource && checked('auto_update'), mode = get('update_mode');
+        field('subscription_url').closest('tr').toggle(hasSource);
+        field('update_mode').prop('disabled', !auto).closest('tr').toggle(auto);
+        field('update_hours').prop('disabled', !auto || mode !== 'manual').closest('tr').toggle(auto && mode === 'manual');
+        let metadata = {}; try { metadata = JSON.parse(get('subscription_metadata') || '{}') || {}; } catch (_) { /* handled on save */ }
+        $('#xray-update-reason').text(!hasSource
+            ? 'No subscription URL. Import an HTTPS subscription URL to enable update settings.'
+            : (auto && mode !== 'manual' && !metadata.interval_hours ? 'Missing or invalid positive profile-update-interval header; scheduled updates are disabled.' : ''));
         let changed = false;
         try {
             const baseline = get('subscription_baseline');
@@ -64,6 +70,14 @@ $(function () {
         const $text = field('config_json');
         if (!$text.length) return;
         const $tools = $('<div id="xray-editor-tools"><button type="button" id="xray-format" class="btn btn-default btn-sm">Format JSON</button><button type="button" id="xray-import" class="btn btn-default btn-sm">Import JSON / URL / VLESS</button><button type="button" id="xray-validate" class="btn btn-info btn-sm">Validate Config</button><span id="xray-validation-result" role="status"></span></div>');
+        const $cell = $text.closest('td');
+        const $label = $cell.prev('td');
+        if ($label.length) {
+            const columns = $cell.closest('tr').children('td,th').length;
+            $label.attr('colspan', columns).addClass('xray-full-config-cell').append(
+                $('<div class="xray-full-config-body">').append($cell.contents()));
+            $cell.remove();
+        }
         $text.before($tools).after('<div id="xray-editor-diagnostics" role="status"></div>');
         editor = XrayEditor.mount($text[0], update);
         field('subscription_url').attr({type:'password', autocomplete:'off', spellcheck:'false', readonly:true});
@@ -81,9 +95,9 @@ $(function () {
         replaceSelect('update_mode', [['subscription','From Subscription'],['manual','Manual']]);
         replaceSelect('update_hours', Array.from({length:24}, (_,i) => [String(i+1), (i+1) + ' h']));
         field('auto_update').closest('td').append('<span id="xray-auto-state" style="margin-left:8px"></span><div id="xray-manual-warning" style="display:none" role="status">Конфигурация изменена вручную. При следующем успешном обновлении подписки изменения будут сброшены</div><div id="xray-update-reason" role="status"></div>');
-        $dialog.find('.modal-body').prepend('<div id="xray-import-panel" hidden><textarea id="xray-import-input" placeholder="Full JSON, HTTPS subscription URL or vless:// link" spellcheck="false"></textarea><input id="xray-import-file" type="file" accept="application/json,.json"><button id="xray-import-read" type="button" class="btn btn-primary btn-sm">Import</button><select id="xray-import-choice" class="form-control" hidden></select><div id="xray-import-status" role="status"></div></div>');
+        $tools.after('<div id="xray-import-panel" hidden><textarea id="xray-import-input" placeholder="Full JSON, HTTPS subscription URL or vless:// link" spellcheck="false"></textarea><input id="xray-import-file" type="file" accept="application/json,.json"><button id="xray-import-read" type="button" class="btn btn-primary btn-sm">Import</button><select id="xray-import-choice" class="form-control" hidden></select><div id="xray-import-status" role="status"></div></div>');
         $('#xray-format').on('click', () => { try { editor.format(); update(); } catch (_) { update(); } });
-        $('#xray-import').on('click', () => { const p = document.getElementById('xray-import-panel'); p.hidden = !p.hidden; });
+        $('#xray-import').on('click', () => { const p = document.getElementById('xray-import-panel'); p.hidden = !p.hidden; if (!p.hidden) $('#xray-import-input').trigger('focus'); });
         $('#xray-import-file').on('change', async function () { if (this.files[0]) $('#xray-import-input').val(await this.files[0].text()); });
         $('#xray-validate').on('click', function () {
             update(); const issues = editor.diagnostics();

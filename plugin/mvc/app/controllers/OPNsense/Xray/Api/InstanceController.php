@@ -25,6 +25,7 @@ class InstanceController extends ApiMutableModelControllerBase
             $config = \XrayConfig::decode($json);
             if ((string)$node->subscription_baseline !== '') { \XrayConfig::decode((string)$node->subscription_baseline); }
             $url = (string)$node->subscription_url;
+            if ($url === '') { $node->auto_update = '0'; }
             if ($url !== '') { \XraySubscription::url($url); }
             $metadata = json_decode((string)$node->subscription_metadata ?: '{}', false, 16, JSON_THROW_ON_ERROR);
             if (!$metadata instanceof \stdClass) { throw new \RuntimeException('Invalid subscription metadata'); }

@@ -9,7 +9,7 @@ const id='11111111-1111-4111-8111-111111111111';
 test('Full configuration dialog, unsaved validation and subscription choices',async t=>{
  let lastValidation=null, preparedProfile=null;
  const server=createServer(async(req,res)=>{
-  if(req.url==='/') {res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><style>td{width:1000px}#DialogInstance{display:block}</style><link rel="stylesheet" href="/editor.css"><div id="DialogInstance" class="in"><div class="modal-body"><table>${fields.map(k=>`<tr><td>${k}</td><td>${k==='config_json'||k==='subscription_metadata'?`<textarea id="instance.${k}"></textarea>`:`<input id="instance.${k}" type="${['auto_update','use_config_dns'].includes(k)?'checkbox':'text'}">`}</td></tr>`).join('')}</table></div></div><script src="/jquery.js"></script><script src="/editor.js"></script><script>const originalMount=XrayEditor.mount;XrayEditor={...XrayEditor,mount:(...args)=>window.dialogEditor=originalMount(...args)};window.setInterval=fn=>{window.pollSubscription=fn;};</script><script src="/dialog.js"></script>`);return;}
+  if(req.url==='/') {res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><style>table{width:100%;table-layout:fixed}#DialogInstance{display:block;width:100%}</style><link rel="stylesheet" href="/editor.css"><div id="DialogInstance" class="in"><div class="modal-body"><table>${fields.map(k=>`<tr><td>${k}</td><td>${k==='config_json'||k==='subscription_metadata'?`<textarea id="instance.${k}"></textarea>`:`<input id="instance.${k}" type="${['auto_update','use_config_dns'].includes(k)?'checkbox':'text'}">`}</td></tr>`).join('')}</table></div></div><script src="/jquery.js"></script><script src="/editor.js"></script><script>const originalMount=XrayEditor.mount;XrayEditor={...XrayEditor,mount:(...args)=>window.dialogEditor=originalMount(...args)};window.setInterval=fn=>{window.pollSubscription=fn;};</script><script src="/dialog.js"></script>`);return;}
   if(req.url==='/api/xray/service/validate'){let body='';for await(const chunk of req)body+=chunk;lastValidation=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',message:'Effective configuration is valid'}));return;}
   if(req.url==='/api/xray/import/subscription'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',configurations:[{...fixture,remarks:'First'},{...fixture,remarks:'Second'}],metadata:{interval_hours:2,ping_type:'proxy-head',check_url:'https://example.test'},fetched_at:100}));return;}
   if(req.url==='/api/xray/instance/prepared/'+id){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',profile:preparedProfile}));return;}
@@ -34,9 +34,19 @@ test('Full configuration dialog, unsaved validation and subscription choices',as
    assert.deepEqual(await page.evaluate(()=>JSON.parse(dialogEditor.getValue())),fixture);
    assert.equal(await page.locator('[id="instance.subscription_url"]').isVisible(),false);
   });
+  await t.test('without a subscription URL, update settings are locked and explain why', async()=>{
+   await page.evaluate(()=>{$('#instance\\.auto_update').prop('checked',true).trigger('change');});
+   const toggle=page.locator('[id="instance.auto_update"]');
+   assert.equal(await toggle.isDisabled(),true);
+   assert.equal(await toggle.isChecked(),false);
+   assert.match(await page.locator('#xray-update-reason').textContent(),/^No subscription URL/);
+  });
   await t.test('multiple URL profiles require an explicit choice by remarks',async()=>{
-   await page.locator('#xray-import').click();await page.locator('#xray-import-input').fill('https://example.test/subscription');await page.locator('#xray-import-read').click();await page.waitForFunction(()=>document.querySelectorAll('#xray-import-choice option').length===3);
-   assert.equal(await page.evaluate(()=>JSON.parse(dialogEditor.getValue()).remarks),'Unsaved');await page.locator('#xray-import-choice').selectOption('1');assert.equal(await page.evaluate(()=>JSON.parse(dialogEditor.getValue()).remarks),'Second');assert.equal(await page.locator('[id="instance.name"]').inputValue(),'Second');
+   const before = await page.evaluate(()=>dialogEditor.getValue());
+   await page.locator('#xray-import').click();
+   assert.equal(await page.locator('#xray-import-panel').evaluate(panel=>panel.previousElementSibling.id),'xray-editor-tools');
+   await page.locator('#xray-import-input').fill('https://example.test/subscription');await page.locator('#xray-import-read').click();await page.waitForFunction(()=>document.querySelectorAll('#xray-import-choice option').length===3);
+   assert.equal(await page.evaluate(()=>dialogEditor.getValue()),before);await page.locator('#xray-import-choice').selectOption('1');assert.equal(await page.evaluate(()=>JSON.parse(dialogEditor.getValue()).remarks),'Second');assert.equal(await page.locator('[id="instance.name"]').inputValue(),'Second');
    assert.equal(await page.locator('[id="instance.subscription_url"]').inputValue(),'https://example.test/subscription');
   });
   await t.test('editor accepts keyboard edits without reentrant updates',async()=>{await page.locator('.cm-content').click();await page.keyboard.press('ControlOrMeta+End');await page.keyboard.type(' ');assert.deepEqual(errors,[]);});

@@ -47,7 +47,13 @@ function dnsMarks(state) {
   for (const prop of root?.getChildren('Property') || []) {
     const name = prop.getChild('PropertyName');
     let key; try { key = name ? JSON.parse(state.sliceDoc(name.from, name.to)) : null; } catch (_) { continue; }
-    if (key === 'dns') ranges.push(Decoration.mark({class: 'xray-dns-disabled'}).range(prop.from, prop.to));
+    if (key === 'dns') {
+      const trailing = /^\s*,/.exec(state.sliceDoc(prop.to, root.to));
+      const leading = trailing ? null : /,\s*$/.exec(state.sliceDoc(root.from, prop.from));
+      ranges.push(Decoration.mark({class: 'xray-dns-disabled'}).range(
+        leading ? prop.from - leading[0].length : prop.from,
+        trailing ? prop.to + trailing[0].length : prop.to));
+    }
   }
   return Decoration.set(ranges);
 }
@@ -57,7 +63,7 @@ export function mount(textarea, onChange = () => {}) {
   textarea.after(host); textarea.style.display = 'none';
   let loading = false;
   const view = new EditorView({parent: host, state: EditorState.create({doc: textarea.value || '{}', extensions: [
-    lineNumbers(), highlightActiveLineGutter(), history(), foldGutter(), drawSelection(), indentOnInput(), bracketMatching(), highlightActiveLine(),
+    EditorView.lineWrapping, lineNumbers(), highlightActiveLineGutter(), history(), foldGutter(), drawSelection(), indentOnInput(), bracketMatching(), highlightActiveLine(),
     syntaxHighlighting(defaultHighlightStyle), json(), lintGutter(), linter(v => diagnostics(v.state)), search({top: true}), highlightSelectionMatches(),
     keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap, ...searchKeymap, indentWithTab]), dnsEnabled, dimDns,
     EditorView.theme({'&': {height: '100%', fontSize: '13px'}, '.cm-scroller': {overflow: 'auto', fontFamily: 'monospace'}, '.cm-content': {minHeight: '100%'}}),

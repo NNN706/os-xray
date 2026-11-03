@@ -26,10 +26,34 @@ try {
         echo json_encode(['result' => 'ok', 'profile' => $c, 'schedule' => XrayStore::schedule($c, time()), 'update' => XrayStore::read($id, 'subscription')]);
     } elseif (in_array($action, ['validate', 'fetch'], true)) {
         if (!preg_match('/^[a-f0-9]{32}$/D', $id)) { throw new RuntimeException('Invalid request'); }
-        $path = '/var/tmp/xray-api/' . $id;
-        if (realpath(dirname($path)) !== '/var/tmp/xray-api' || !is_file($path) || is_link($path) || (fileperms($path) & 0777) !== 0600 || fileowner($path) !== fileowner(dirname($path)) || filesize($path) > 4200000) { throw new RuntimeException('Invalid request file'); }
-        try { $request = json_decode(file_get_contents($path), true, 128, JSON_THROW_ON_ERROR); }
-        finally { unlink($path); }
+        $directory = '/var/tmp/xray-api';
+        $dir = @lstat($directory);
+        // Check the final directory rather than requiring all system path aliases to be literal.
+        if (!$dir || ($dir['mode'] & 0177777) !== 0040700) {
+            throw new RuntimeException('Private request directory unavailable; reinstall the plugin');
+        }
+        $path = $directory . '/' . $id;
+        $entry = @lstat($path);
+        if (!$entry || ($entry['mode'] & 0177777) !== 0100600 || $entry['nlink'] !== 1 ||
+            !in_array($entry['uid'], [0, $dir['uid']], true)) {
+            throw new RuntimeException('Request ticket missing or has unsafe permissions or ownership');
+        }
+        $fd = @fopen($path, 'rb');
+        if (!$fd) { throw new RuntimeException('Cannot open request ticket'); }
+        try {
+            $file = fstat($fd);
+            if (!$file || $file['dev'] !== $entry['dev'] || $file['ino'] !== $entry['ino'] ||
+                $file['mode'] !== $entry['mode'] || $file['uid'] !== $entry['uid'] || $file['nlink'] !== 1) {
+                throw new RuntimeException('Request ticket changed before reading');
+            }
+            if ($file['size'] > 4200000) { throw new RuntimeException('Request exceeds 4 MiB'); }
+            $bytes = stream_get_contents($fd, 4200001);
+            if ($bytes === false || strlen($bytes) > 4200000) { throw new RuntimeException('Cannot read request ticket'); }
+            $request = json_decode($bytes, true, 128, JSON_THROW_ON_ERROR);
+        } finally {
+            fclose($fd);
+            @unlink($path);
+        }
         if ($action === 'fetch') {
             echo json_encode(['result' => 'ok'] + XraySubscription::fetch($request['url'] ?? ''));
         } else {
