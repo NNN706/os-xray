@@ -69,6 +69,32 @@ export function mount(textarea, onChange = () => {}) {
     EditorView.theme({'&': {height: '100%', fontSize: '13px'}, '.cm-scroller': {overflow: 'auto', fontFamily: 'monospace'}, '.cm-content': {minHeight: '100%'}}),
     EditorView.updateListener.of(update => { if (update.docChanged) { textarea.value = update.state.doc.toString(); if (!loading) { textarea.dispatchEvent(new Event('change', {bubbles: true})); onChange(); } } })
   ]})});
+  const grip = document.createElement('button');
+  grip.type = 'button';
+  grip.className = 'xray-editor-resize';
+  grip.setAttribute('aria-label', 'Resize JSON editor vertically. Use up or down arrows.');
+  grip.title = 'Drag to resize the JSON editor';
+  host.after(grip);
+  const resize = height => {
+    host.style.height = Math.max(180, height) + 'px';
+    view.requestMeasure();
+  };
+  let drag;
+  grip.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    drag = {id:event.pointerId, y:event.clientY, height:host.offsetHeight};
+    grip.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  grip.addEventListener('pointermove', event => {
+    if (drag?.id === event.pointerId) resize(drag.height + event.clientY - drag.y);
+  });
+  grip.addEventListener('lostpointercapture', () => { drag = null; });
+  grip.addEventListener('keydown', event => {
+    if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    resize(host.offsetHeight + (event.key === 'ArrowDown' ? 24 : -24));
+  });
   return {
     view,
     getValue: () => view.state.doc.toString(),
@@ -76,6 +102,6 @@ export function mount(textarea, onChange = () => {}) {
     setDns(value) { view.dispatch({effects: dnsEffect.of(value)}); },
     format() { const value = JSON.stringify(JSON.parse(view.state.doc.toString()), null, 2); view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: value}}); },
     diagnostics: () => diagnostics(view.state),
-    destroy() { view.destroy(); host.remove(); textarea.style.display = ''; }
+    destroy() { view.destroy(); grip.remove(); host.remove(); textarea.style.display = ''; }
   };
 }

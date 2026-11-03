@@ -11,7 +11,7 @@ Full JSON configuration editor, JSON/VLESS/HTTPS subscription import, prepared/a
 
 ### Install on an isolated OPNsense router
 
-Have a configuration backup and console access. Existing dependencies: `/usr/local/bin/xray-core`, `/usr/local/tun2socks/tun2socks`, `/usr/local/bin/curl` and the standard OPNsense PHP/framework. Missing dependencies are reported, not downloaded or replaced.
+Have a configuration backup and console access. Existing dependencies: `/usr/local/bin/xray-core`, `/usr/local/tun2socks/tun2socks`, `/usr/local/bin/curl` and the standard OPNsense PHP/framework. Missing Xray-core and tun2socks on FreeBSD amd64 are downloaded with pinned checksums; missing curl is installed from configured package repositories. Existing executables are preserved.
 
 ```sh
 workdir=$(mktemp -d /root/os-xray-install.XXXXXX)

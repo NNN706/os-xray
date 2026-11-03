@@ -9,6 +9,17 @@ $(function () {
     const set = (name, value) => field(name).val(value == null ? '' : value);
     const post = (url, data) => $.ajax({url, type:'POST', contentType:'application/json', dataType:'json', data:JSON.stringify(data)});
     function status(message, error = false) { $('#xray-import-status').text(message).toggleClass('text-danger', error); }
+    let validationInput = '', validationGeneration = 0;
+    const draft = () => ({config_json:editor.getValue(), use_config_dns:checked('use_config_dns'), socks_inbound:get('socks_inbound')});
+    function validationState(state, message = '') {
+        $('#xray-validate').attr('data-validation', state);
+        $('#xray-validation-result').text(message);
+    }
+    function resetValidation() {
+        validationGeneration++;
+        $('#xray-validate').prop('disabled', false);
+        validationState('idle');
+    }
     function update() {
         if (!editor) return;
         editor.setDns(checked('use_config_dns'));
@@ -41,6 +52,8 @@ $(function () {
         field('health_interval').closest('tr').toggle(checked('health_enabled'));
         field('health_bypass').closest('tr').toggle(checked('health_enabled') && managed);
         socksOptions();
+        const input = JSON.stringify(draft());
+        if (input !== validationInput) { validationInput = input; resetValidation(); }
     }
     function socksOptions() {
         const $select = field('socks_inbound'), selected = $select.val();
@@ -63,13 +76,13 @@ $(function () {
         lastFetch = String(data.instance.subscription_fetched || '0');
         // Normal mapper may already have set these. Apply explicitly for asynchronous fetches.
         ['subscription_hash','subscription_baseline','subscription_metadata','subscription_fetched','subscription_remarks'].forEach(k => set(k, data.instance[k]));
-        opening = false; update(); set('socks_inbound', data.instance.socks_inbound || '');
+        opening = false; update(); set('socks_inbound', data.instance.socks_inbound || ''); update();
     }
     function init() {
         if (editor) return;
         const $text = field('config_json');
         if (!$text.length) return;
-        const $tools = $('<div id="xray-editor-tools"><button type="button" id="xray-format" class="btn btn-default btn-sm">Format JSON</button><button type="button" id="xray-import" class="btn btn-default btn-sm">Import JSON / URL / VLESS</button><button type="button" id="xray-validate" class="btn btn-info btn-sm">Validate Config</button><span id="xray-validation-result" role="status"></span></div>');
+        const $tools = $('<div id="xray-editor-tools"><button type="button" id="xray-format" class="btn btn-default btn-sm">Format JSON</button><button type="button" id="xray-import" class="btn btn-default btn-sm">Import JSON / URL / VLESS</button><button type="button" id="xray-validate" class="btn btn-default btn-sm" data-validation="idle">Validate Config</button><span id="xray-validation-result" role="status"></span></div>');
         const $cell = $text.closest('td');
         const $label = $cell.prev('td');
         if ($label.length) {
@@ -100,11 +113,20 @@ $(function () {
         $('#xray-import').on('click', () => { const p = document.getElementById('xray-import-panel'); p.hidden = !p.hidden; if (!p.hidden) $('#xray-import-input').trigger('focus'); });
         $('#xray-import-file').on('change', async function () { if (this.files[0]) $('#xray-import-input').val(await this.files[0].text()); });
         $('#xray-validate').on('click', function () {
-            update(); const issues = editor.diagnostics();
-            if (issues.length) { $('#xray-validation-result').text(issues[0].message); return; }
+            update();
+            const issues = editor.diagnostics();
+            if (issues.length) { validationState('error', issues[0].message); return; }
+            const generation = ++validationGeneration;
             const button = $(this).prop('disabled', true);
-            $('#xray-validation-result').text('Validating current editor content…');
-            post('/api/xray/service/validate', {config_json:editor.getValue(), use_config_dns:checked('use_config_dns'), socks_inbound:get('socks_inbound')}).done(data => $('#xray-validation-result').text(data.message || 'Validation failed')).fail(() => $('#xray-validation-result').text('Validation request failed')).always(() => button.prop('disabled',false));
+            validationState('pending', 'Validating current editor content…');
+            post('/api/xray/service/validate', draft()).done(data => {
+                if (generation !== validationGeneration) return;
+                validationState(data.result === 'ok' ? 'success' : 'error', data.message || 'Validation failed');
+            }).fail(() => {
+                if (generation === validationGeneration) validationState('error', 'Validation request failed');
+            }).always(() => {
+                if (generation === validationGeneration) button.prop('disabled',false);
+            });
         });
         $('#xray-import-read').on('click', async function () {
             const value = $('#xray-import-input').val().trim();
@@ -124,7 +146,11 @@ $(function () {
             } catch (error) { status(error.responseJSON?.message || error.message || 'Import failed', true); }
             finally { $(this).prop('disabled',false); }
         });
-        $dialog.on('change', 'input,select', update);
+        $dialog.on('change', 'input,select', function () {
+            if (this.id.startsWith('instance.')) resetValidation();
+            update();
+        });
+        $dialog.on('input', 'input[id^="instance."]', resetValidation);
     }
     function preview(configs, download, url) {
         if (!configs?.length || configs.some(c => !c || Array.isArray(c) || typeof c !== 'object' || !Array.isArray(c.outbounds) || !c.outbounds.length)) throw new Error('Expected full configuration object(s) with outbounds');
@@ -152,7 +178,7 @@ $(function () {
         return $.Deferred().resolve().promise();
     };
     $dialog.on('show.bs.modal', function () {
-        init(); opening = true; currentUuid = null; lastFetch = '';
+        init(); resetValidation(); opening = true; currentUuid = null; lastFetch = '';
         $('#xray-validation-result,#xray-import-status,#xray-editor-diagnostics').text('');
         $('#xray-import-input').val(''); $('#xray-import-choice').empty().prop('hidden',true);
         $('#xray-import-panel').prop('hidden',true);

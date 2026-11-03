@@ -75,8 +75,8 @@ test('CodeMirror full JSON editor in Chromium', async t => {
       assert.ok(await page.locator('.cm-line').count()<before);
     });
     await t.test('height can be changed with resize handle',async()=> {
-      const box=await page.locator('.xray-json-editor').boundingBox();
-      await page.mouse.move(box.x+box.width-3,box.y+box.height-3);await page.mouse.down();await page.mouse.move(box.x+box.width-3,box.y+box.height+100,{steps:10});await page.mouse.up();
+      const box=await page.locator('.xray-editor-resize').boundingBox();
+      await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+box.height/2+100,{steps:10});await page.mouse.up();
       assert.ok(await page.locator('.xray-json-editor').evaluate(e=>e.offsetHeight)>420);
     });
     assert.deepEqual(errors,[]);

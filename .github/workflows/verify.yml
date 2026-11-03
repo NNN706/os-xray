@@ -1,7 +1,7 @@
 name: Build, test and release
 on:
   push:
-    branches: [develop, 'feature/**', 'release/**']
+    branches: [main, develop, 'feature/**', 'release/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:

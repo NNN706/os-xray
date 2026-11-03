@@ -7,10 +7,10 @@ const fixture=JSON.parse(await readFile('tests/full-config.json','utf8'));
 const fields=['config_json','use_config_dns','socks_inbound','subscription_url','subscription_hash','subscription_baseline','subscription_metadata','subscription_fetched','subscription_remarks','auto_update','update_mode','update_hours','name'];
 const id='11111111-1111-4111-8111-111111111111';
 test('Full configuration dialog, unsaved validation and subscription choices',async t=>{
- let lastValidation=null, preparedProfile=null;
+ let lastValidation=null, preparedProfile=null, validationReply={result:"ok",message:"Effective configuration is valid"};
  const server=createServer(async(req,res)=>{
   if(req.url==='/') {res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><style>table{width:100%;table-layout:fixed}#DialogInstance{display:block;width:100%}</style><link rel="stylesheet" href="/editor.css"><div id="DialogInstance" class="in"><div class="modal-body"><table>${fields.map(k=>`<tr><td>${k}</td><td>${k==='config_json'||k==='subscription_metadata'?`<textarea id="instance.${k}"></textarea>`:`<input id="instance.${k}" type="${['auto_update','use_config_dns'].includes(k)?'checkbox':'text'}">`}</td></tr>`).join('')}</table></div></div><script src="/jquery.js"></script><script src="/editor.js"></script><script>const originalMount=XrayEditor.mount;XrayEditor={...XrayEditor,mount:(...args)=>window.dialogEditor=originalMount(...args)};window.setInterval=fn=>{window.pollSubscription=fn;};</script><script src="/dialog.js"></script>`);return;}
-  if(req.url==='/api/xray/service/validate'){let body='';for await(const chunk of req)body+=chunk;lastValidation=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',message:'Effective configuration is valid'}));return;}
+  if(req.url==='/api/xray/service/validate'){let body='';for await(const chunk of req)body+=chunk;lastValidation=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify(validationReply));return;}
   if(req.url==='/api/xray/import/subscription'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',configurations:[{...fixture,remarks:'First'},{...fixture,remarks:'Second'}],metadata:{interval_hours:2,ping_type:'proxy-head',check_url:'https://example.test'},fetched_at:100}));return;}
   if(req.url==='/api/xray/instance/prepared/'+id){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',profile:preparedProfile}));return;}
   if(req.url==='/api/xray/instance/getItem/'+id){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({instance:{config_json:JSON.stringify(fixture),subscription_hash:'',subscription_metadata:'{}',subscription_fetched:'0'}}));return;}
@@ -24,6 +24,20 @@ test('Full configuration dialog, unsaved validation and subscription choices',as
    await page.evaluate(()=>{const value=JSON.parse(dialogEditor.getValue());value.remarks='Unsaved';dialogEditor.setValue(JSON.stringify(value));document.getElementById('instance.use_config_dns').checked=false;$('#instance\\.use_config_dns').trigger('change');});
    await page.locator('#xray-validate').click();await page.waitForFunction(()=>document.getElementById('xray-validation-result').textContent==='Effective configuration is valid');
    assert.equal(JSON.parse(lastValidation.config_json).remarks,'Unsaved');assert.equal(lastValidation.use_config_dns,false);assert.ok(await page.locator('.xray-dns-disabled').count());
+  });
+  await t.test('validation colors persist until an edit and failures are red',async()=>{
+   const button=page.locator('#xray-validate');
+   assert.equal(await button.getAttribute('data-validation'),'success');
+   await page.evaluate(()=>$('#instance\\.use_config_dns').trigger('change'));
+   assert.equal(await button.getAttribute('data-validation'),'idle');
+   validationReply={result:'failed',message:'Xray rejected the configuration'};
+   await button.click();
+   await page.waitForFunction(()=>document.getElementById('xray-validate').dataset.validation==='error');
+   assert.match(await page.locator('#xray-validation-result').textContent(),/Xray rejected/);
+   await page.evaluate(()=>{dialogEditor.setValue('{"outbounds":[{"protocol":"freedom"}]}');$('#instance\\.use_config_dns').trigger('change');});
+   assert.equal(await button.getAttribute('data-validation'),'idle');
+   assert.equal(await page.locator('#xray-validation-result').textContent(),'');
+   validationReply={result:'ok',message:'Effective configuration is valid'};
   });
   await t.test('reopening a profile loads saved JSON, not stale unsaved editor text',async()=>{
    await page.evaluate(value=>{

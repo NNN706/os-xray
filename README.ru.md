@@ -2,7 +2,7 @@
 
 **Клиент Xray для OPNsense: полный JSON-редактор, подписки и необязательный обход через WAN при отказе прокси.**
 
-[English](README.md) · [Скачать v4.0.0-rc.1](https://github.com/NNN706/os-xray/releases/tag/v4.0.0-rc.1) · [Статус проверок](docs/TESTING.md)
+[English](README.md) · [Скачать v4.0.0-rc.2](https://github.com/NNN706/os-xray/releases/tag/v4.0.0-rc.2) · [Статус проверок](docs/TESTING.md)
 
 > **Предварительный выпуск для изолированного тестового роутера.** Переносимые тесты выполняются на Linux. Реальные TUN/PF, переключение, перезагрузка и откат на OPNsense/FreeBSD ещё требуют испытаний. Это не стабильный выпуск для рабочего роутера.
 
@@ -16,13 +16,13 @@
 
 Плагин не заменяет Unbound, не меняет системный DNS, не устанавливает BIRD/DNSTAP и не переписывает чужие gateways или общий default-маршрут.
 
-> **Установщик в ветке разработки:** скачивает недостающие Xray-core и tun2socks для FreeBSD amd64 с проверкой закреплённых SHA-256; curl ставит из настроенных репозиториев OPNsense. Существующие бинарники сохраняются. `sh install.sh` устанавливает файлы текущей сборки, а `sh install.sh --release vVERSION` скачивает, проверяет и запускает установщик выбранного выпуска. Опубликованный rc.1 ниже по-прежнему требует ручной установки зависимостей.
+> **Установщик в ветке разработки:** скачивает недостающие Xray-core и tun2socks для FreeBSD amd64 с проверкой закреплённых SHA-256; curl ставит из настроенных репозиториев OPNsense. Существующие бинарники сохраняются. `sh install.sh` устанавливает файлы текущей сборки, а `sh install.sh --release vVERSION` скачивает, проверяет и запускает установщик выбранного выпуска.
 
 ## Перед установкой
 
 Нужна изолированная OPNsense с резервной копией конфигурации и консольным доступом. Выпуск — установочный архив, **а не нативный пакет `.pkg`**.
 
-Следующие компоненты должны быть установлены заранее:
+Установщик проверяет эти компоненты и устанавливает недостающие зависимости:
 
 | Компонент | Ожидаемый путь |
 | --- | --- |
@@ -31,7 +31,7 @@
 | tun2socks | `/usr/local/tun2socks/tun2socks` |
 | curl | `/usr/local/bin/curl` |
 
-Установщик сообщает об отсутствующих зависимостях; Xray-core и tun2socks он не скачивает и не заменяет. Ядро должно поддерживать импортированный JSON — это проверяет **Validate**. Node.js на роутере не требуется. Debian используется для сборки и тестов, не для установки плагина.
+На amd64 установщик скачивает недостающие Xray-core и tun2socks с проверкой контрольных сумм, а curl ставит из настроенных репозиториев. Существующие бинарники сохраняются. Ядро должно поддерживать импортированный JSON — это проверяет **Validate**. Node.js на роутере не требуется. Debian используется для сборки и тестов, не для установки плагина.
 
 ## Установка предварительного выпуска
 
@@ -42,10 +42,10 @@
 ```sh
 workdir=$(mktemp -d /root/os-xray-install.XXXXXX)
 cd "$workdir"
-fetch -o os-xray-v4.0.0-rc.1.tar.gz https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.1/os-xray-v4.0.0-rc.1.tar.gz
-fetch -o manifest.json https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.1/manifest.json
-fetch -o SHA256SUMS https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.1/SHA256SUMS
-sha256 -q os-xray-v4.0.0-rc.1.tar.gz
+fetch -o os-xray-v4.0.0-rc.2.tar.gz https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.2/os-xray-v4.0.0-rc.2.tar.gz
+fetch -o manifest.json https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.2/manifest.json
+fetch -o SHA256SUMS https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.2/SHA256SUMS
+sha256 -q os-xray-v4.0.0-rc.2.tar.gz
 sha256 -q manifest.json
 cat SHA256SUMS
 ```
@@ -55,8 +55,8 @@ cat SHA256SUMS
 После совпадения обеих сумм:
 
 ```sh
-tar -xzf os-xray-v4.0.0-rc.1.tar.gz
-cd os-xray-v4.0.0-rc.1
+tar -xzf os-xray-v4.0.0-rc.2.tar.gz
+cd os-xray-v4.0.0-rc.2
 sh install.sh
 ```
 

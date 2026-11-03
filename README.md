@@ -2,7 +2,7 @@
 
 **An Xray client for OPNsense, with a full JSON editor, subscriptions and optional WAN fallback.**
 
-[Русская версия](README.ru.md) · [Download v4.0.0-rc.1](https://github.com/NNN706/os-xray/releases/tag/v4.0.0-rc.1) · [Testing status](docs/TESTING.md)
+[Русская версия](README.ru.md) · [Download v4.0.0-rc.2](https://github.com/NNN706/os-xray/releases/tag/v4.0.0-rc.2) · [Testing status](docs/TESTING.md)
 
 > **Preview release for an isolated test router.** Portable tests run on Linux; real OPNsense/FreeBSD TUN, firewall failover, reboot and runtime rollback still require testing. This is not a stable production release.
 
@@ -16,13 +16,13 @@
 
 The plugin does not replace Unbound, change the system DNS, install BIRD/DNSTAP or modify unrelated gateway settings and the global default route.
 
-> **Development installer:** Installs missing Xray-core and tun2socks from pinned FreeBSD amd64 archives after verifying SHA-256, and installs missing curl via configured OPNsense repositories. Existing executables are kept. Run the updated checkout's `sh install.sh` to install its bundled files, or `sh install.sh --release vVERSION` to download, verify and install a published version. That mode runs the selected release's own installer. The published rc.1 below still requires manual dependencies.
+> **Development installer:** Installs missing Xray-core and tun2socks from pinned FreeBSD amd64 archives after verifying SHA-256, and installs missing curl via configured OPNsense repositories. Existing executables are kept. Run the updated checkout's `sh install.sh` to install its bundled files, or `sh install.sh --release vVERSION` to download, verify and install a published version. That mode runs the selected release's own installer.
 
 ## Before you install
 
 Use an isolated OPNsense router with a configuration backup and console access. This is an installation archive, **not a native `.pkg` package**.
 
-These executables must already be installed:
+The installer checks these executables and provisions missing dependencies:
 
 | Component | Expected path |
 | --- | --- |
@@ -31,7 +31,7 @@ These executables must already be installed:
 | tun2socks | `/usr/local/tun2socks/tun2socks` |
 | curl | `/usr/local/bin/curl` |
 
-The installer reports missing dependencies; it does not download or replace Xray-core or tun2socks. Your installed core must support the JSON you import; **Validate** checks that. Node.js is not needed on the router. Debian is a build/test host, not an installation target.
+On amd64 the installer downloads missing Xray-core and tun2socks with pinned checksums, and installs missing curl from the configured package repositories. Existing binaries are preserved. Your installed core must support the JSON you import; **Validate** checks that. Node.js is not needed on the router. Debian is a build/test host, not an installation target.
 
 ## Install the preview
 
@@ -42,10 +42,10 @@ In the OPNsense shell, as root:
 ```sh
 workdir=$(mktemp -d /root/os-xray-install.XXXXXX)
 cd "$workdir"
-fetch -o os-xray-v4.0.0-rc.1.tar.gz https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.1/os-xray-v4.0.0-rc.1.tar.gz
-fetch -o manifest.json https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.1/manifest.json
-fetch -o SHA256SUMS https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.1/SHA256SUMS
-sha256 -q os-xray-v4.0.0-rc.1.tar.gz
+fetch -o os-xray-v4.0.0-rc.2.tar.gz https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.2/os-xray-v4.0.0-rc.2.tar.gz
+fetch -o manifest.json https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.2/manifest.json
+fetch -o SHA256SUMS https://github.com/NNN706/os-xray/releases/download/v4.0.0-rc.2/SHA256SUMS
+sha256 -q os-xray-v4.0.0-rc.2.tar.gz
 sha256 -q manifest.json
 cat SHA256SUMS
 ```
@@ -55,8 +55,8 @@ cat SHA256SUMS
 After both match:
 
 ```sh
-tar -xzf os-xray-v4.0.0-rc.1.tar.gz
-cd os-xray-v4.0.0-rc.1
+tar -xzf os-xray-v4.0.0-rc.2.tar.gz
+cd os-xray-v4.0.0-rc.2
 sh install.sh
 ```
 
