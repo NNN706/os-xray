@@ -49,10 +49,10 @@ fi
 # Standalone entry point: install a pinned, verified bundle when run without plugin files.
 if [ "$#" = 0 ] && [ ! -f "$RELEASE_ROOT/VERSION" ]; then
     new_stage
-    download 'https://codeload.github.com/NNN706/os-xray/tar.gz/0e632428060f16bf80e8ed4816c93b96f966dd86' "$stage/os-xray.tar.gz"
-    verify_sha "$stage/os-xray.tar.gz" '04bf0ff6dd74f8d5afc2dde3efcf1f62b798712316b39112691fdaaa9187a9e1'
+    download 'https://codeload.github.com/NNN706/os-xray/tar.gz/cef2ef9b535e2c24acbdf6fc7e386f2af608bd31' "$stage/os-xray.tar.gz"
+    verify_sha "$stage/os-xray.tar.gz" '58aff0d031f0a725480f5a11f5a3259ee5129812d763464f74951ba9b1941168'
     /usr/bin/tar -xzf "$stage/os-xray.tar.gz" -C "$stage" || die "Cannot extract plugin bundle."
-    bundle="$stage/os-xray-0e632428060f16bf80e8ed4816c93b96f966dd86"
+    bundle="$stage/os-xray-cef2ef9b535e2c24acbdf6fc7e386f2af608bd31"
     # Use the current installer, not the obsolete installer inside the pinned payload.
     install -m 0600 "$0" "$bundle/install.sh"
     /bin/sh "$bundle/install.sh"
