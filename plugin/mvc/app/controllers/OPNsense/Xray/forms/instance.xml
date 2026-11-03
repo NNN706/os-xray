@@ -51,7 +51,8 @@
   </field>
   <field>
     <id>instance.subscription_url</id>
-    <label>Subscription URL</label>
+    <label>Saved subscription source</label>
+    <help>Read-only. Set or replace this address using Import JSON / URL / VLESS. Scheduled updates use this source.</help>
     <type>text</type>
   </field>
   <field>

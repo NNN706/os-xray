@@ -32,6 +32,17 @@ test('CodeMirror full JSON editor in Chromium', async t => {
       assert.equal(await page.locator('.xray-dns-disabled').count(),0);
     });
     await t.test('DNS Off remains editable with incomplete JSON',async()=>{await page.evaluate(()=>{editor.setDns(false);editor.setValue('{"dn');});await page.waitForTimeout(100);await page.evaluate(value=>{editor.setValue(value);editor.setDns(true);},fixture);});
+    await t.test('repeated formatting of long routing lists does not create diagnostics', async () => {
+      const count = await page.evaluate(() => {
+        const original = editor.getValue();
+        editor.setValue(JSON.stringify({routing:{rules:[{ip:Array.from({length:12000}, (_, i) => '10.' + (i >> 8) + '.' + (i & 255) + '.0/24')}]}}));
+        let errors = 0;
+        for (let i=0; i<3; i++) { editor.format(); errors += editor.diagnostics().length; }
+        editor.setValue(original);
+        return errors;
+      });
+      assert.equal(count,0);
+    });
     await t.test('formatting retains semantic hash and array order',async()=> {
       const result=await page.evaluate(()=>{const before=XrayEditor.hash(JSON.parse(editor.getValue()));editor.format();return [before,XrayEditor.hash(JSON.parse(editor.getValue())),JSON.parse(editor.getValue()).routing.balancers[0].strategy.settings.expected,document.getElementById('config').value===editor.getValue()];});
       assert.equal(result[0],result[1]);assert.equal(result[2],2);assert.equal(result[3],true);

@@ -15,6 +15,7 @@ $(function () {
         const issues = editor.diagnostics();
         $('#xray-editor-diagnostics').text(issues.map(d => d.message).join('\n'));
         const auto = checked('auto_update'), mode = get('update_mode');
+        field('subscription_url').closest('tr').toggle(Boolean(get('subscription_url')));
         field('update_mode').closest('tr').toggle(auto);
         field('update_hours').closest('tr').toggle(auto && mode === 'manual');
         let metadata = {}; try { metadata = JSON.parse(get('subscription_metadata') || '{}'); } catch (_) { /* handled on save */ }
@@ -38,7 +39,7 @@ $(function () {
     function socksOptions() {
         const $select = field('socks_inbound'), selected = $select.val();
         let config; try { config = JSON.parse(editor.getValue()); } catch (_) { return; }
-        const choices = (config.inbounds || []).map(item => ({item, id:item.tag ? 'tag:' + item.tag : 'endpoint:' + item.listen + ':' + item.port})).filter(({item}) => item.protocol === 'socks' && (item.listen === '::1' || /^127\.(?:\d{1,3}\.){2}\d{1,3}$/.test(item.listen || '')) && (!item.settings?.auth || item.settings.auth === 'noauth') && Number.isInteger(item.port) && item.port > 0 && item.port <= 65535);
+        const choices = (Array.isArray(config?.inbounds) ? config.inbounds : []).filter(item => item && typeof item === 'object').map(item => ({item, id:item.tag ? 'tag:' + item.tag : 'endpoint:' + item.listen + ':' + item.port})).filter(({item}) => item.protocol === 'socks' && (item.listen === '::1' || /^127\.(?:\d{1,3}\.){2}\d{1,3}$/.test(item.listen || '')) && (!item.settings?.auth || item.settings.auth === 'noauth') && Number.isInteger(item.port) && item.port > 0 && item.port <= 65535);
         $select.empty().append($('<option>').val('').text('Automatic (tag socks preferred)'));
         choices.forEach(({item,id}) => $select.append($('<option>').val(id).text((item.tag || 'untagged') + ' — ' + item.listen + ':' + item.port)));
         $select.val(choices.some(c => c.id === selected) ? selected : '');
@@ -131,6 +132,7 @@ $(function () {
         else { $choice.prepend($('<option>').val('').text('Choose a configuration by remarks')).val(''); status('Choose one configuration. Configurations will not be merged.'); $choice.on('change', function () { if (this.value !== '') choose(Number(this.value)); }); }
     }
     window.XrayDialogLoad = function (payload) {
+        init();
         const data = payload?.frm_DialogInstance || payload;
         if (data?.instance) loadInstance(data, data.instance.uuid || currentUuid);
         return $.Deferred().resolve().promise();
@@ -141,14 +143,19 @@ $(function () {
         $('#xray-import-input').val(''); $('#xray-import-choice').empty().prop('hidden',true);
         $('#xray-import-panel').prop('hidden',true);
     });
-    $dialog.on('shown.bs.modal', function () { if (opening) { editor.setValue(field('config_json').val() || '{}'); opening = false; update(); } editor.view.requestMeasure(); });
+    $dialog.on('shown.bs.modal', function () { if (!editor) return; if (opening) { editor.setValue(field('config_json').val() || '{}'); opening = false; update(); } editor.view.requestMeasure(); });
     $.ajaxPrefilter(function (settings) {
         const match = settings.url.match(/\/api\/xray\/instance\/getItem(?:\/([a-f0-9-]{36}))?/i);
         if (match) settings.xrayUuid = match[1] || null;
     });
     $(document).ajaxComplete(function (_, xhr, settings) {
         const match = settings.url.match(/\/api\/xray\/instance\/getItem(?:\/([a-f0-9-]{36}))?/i);
-        if (match && $dialog.is(':visible')) { loadInstance(xhr.responseJSON, match[1]); }
+        if (!match || xhr.status === 0) return;
+        if (xhr.status >= 400 || !xhr.responseJSON?.instance) {
+            if (match[1]) window.alert('Could not open the Xray profile. Reload the page and try Edit again.');
+            return;
+        }
+        if ($dialog.is(':visible')) { loadInstance(xhr.responseJSON, match[1]); }
     });
     // A successful scheduled download replaces even unsaved manual edits, as warned in the UI.
     setInterval(function () {

@@ -2,7 +2,7 @@ import {EditorState, StateField, StateEffect} from '@codemirror/state';
 import {EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, Decoration} from '@codemirror/view';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands';
 import {json} from '@codemirror/lang-json';
-import {syntaxTree, syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, bracketMatching} from '@codemirror/language';
+import {ensureSyntaxTree, syntaxTree, syntaxHighlighting, defaultHighlightStyle, foldGutter, foldKeymap, indentOnInput, bracketMatching} from '@codemirror/language';
 import {searchKeymap, highlightSelectionMatches, search} from '@codemirror/search';
 import {linter, lintGutter} from '@codemirror/lint';
 import {sha256} from '@noble/hashes/sha2.js';
@@ -15,20 +15,29 @@ export function canonical(value) {
 }
 export function hash(value) { return bytesToHex(sha256(utf8ToBytes(canonical(value)))); }
 export function diagnostics(state) {
-  const found = [];
-  syntaxTree(state).iterate({enter(node) {
-    if (node.type.isError) {
-      const from = Math.min(node.from, state.doc.length), line = state.doc.lineAt(from);
-      found.push({from, to: Math.min(state.doc.length, Math.max(from + 1, node.to)), severity: 'error', message: `Invalid JSON — line ${line.number}, column ${from - line.from + 1}`});
+  const source = state.doc.toString();
+  try { JSON.parse(source); return []; } catch (error) {
+    // CodeMirror's background parse may be incomplete after a large edit.
+    const position = /\bposition (\d+)/i.exec(error.message);
+    const location = /\bline (\d+) column (\d+)/i.exec(error.message);
+    let offset = position ? Number(position[1]) : null;
+    if (offset === null && location && Number(location[1]) <= state.doc.lines) {
+      const line = state.doc.line(Number(location[1]));
+      offset = Math.min(line.to, line.from + Number(location[2]) - 1);
     }
-  }});
-  if (!found.length) {
-    try { JSON.parse(state.doc.toString()); } catch (_) {
-      const from = state.doc.length, line = state.doc.lineAt(from);
-      found.push({from, to: from, severity: 'error', message: `Invalid JSON — line ${line.number}, column ${from - line.from + 1}`});
+    if (offset === null) {
+      const tree = ensureSyntaxTree(state, state.doc.length, 50);
+      tree?.iterate({enter(node) {
+        if (node.type.isError && offset === null) offset = node.from;
+      }});
     }
+    if (offset === null && !/end of (?:JSON )?(?:input|data)/i.test(error.message)) {
+      return [{from:0, to:0, severity:'error', message:'Invalid JSON'}];
+    }
+    const from = Math.max(0, Math.min(offset ?? state.doc.length, state.doc.length));
+    const line = state.doc.lineAt(from);
+    return [{from, to:Math.min(from + 1, state.doc.length), severity:'error', message:`Invalid JSON — line ${line.number}, column ${from - line.from + 1}`}];
   }
-  return found;
 }
 const dnsEffect = StateEffect.define();
 const dnsEnabled = StateField.define({create: () => true, update(value, tr) { for (const effect of tr.effects) if (effect.is(dnsEffect)) value = effect.value; return value; }});

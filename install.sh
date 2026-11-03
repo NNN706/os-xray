@@ -221,6 +221,8 @@ install_tree() {
             install -d -m 0755 "$(dirname "$target")"
             if ! cmp -s "$item" "$target"; then
                 install -S -m "$mode" "$item" "$target"
+            else
+                chmod "$mode" "$target"
             fi
         done
     ' sh "$_src" "$_dst" "$_mode" {} +

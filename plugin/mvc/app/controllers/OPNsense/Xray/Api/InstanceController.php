@@ -78,10 +78,15 @@ class InstanceController extends ApiMutableModelControllerBase
     {
         $result = $this->getBase('instance', 'instance', $uuid);
         if ($uuid && preg_match('/^[a-f0-9-]{36}$/Di', $uuid)) {
-            $prepared = json_decode((new Backend())->configdRun('xray prepared ' . $uuid), true);
-            if (($prepared['result'] ?? '') === 'ok') {
+            try {
+                $prepared = json_decode((string)(new Backend())->configdRun('xray prepared ' . $uuid), true);
+            } catch (\Throwable $error) {
+                // The persisted profile remains editable if the optional prepared snapshot is unavailable.
+                $prepared = null;
+            }
+            if (($prepared['result'] ?? '') === 'ok' && is_array($prepared['profile'] ?? null)) {
                 foreach (['config_json', 'name', 'subscription_metadata', 'subscription_hash', 'subscription_baseline', 'subscription_fetched'] as $field) {
-                    $result['instance'][$field] = $prepared['profile'][$field];
+                    if (array_key_exists($field, $prepared['profile'])) { $result['instance'][$field] = $prepared['profile'][$field]; }
                 }
                 $result['subscription_status'] = $prepared['schedule'];
                 $result['subscription_update'] = $prepared['update'];

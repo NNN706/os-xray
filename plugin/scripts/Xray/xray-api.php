@@ -39,6 +39,7 @@ try {
         }
     } else { throw new RuntimeException('Unknown API operation'); }
 } catch (Throwable $error) {
-    echo json_encode(['result' => 'failed', 'message' => $error instanceof JsonException ? 'Invalid JSON configuration' : $error->getMessage()]);
-    exit(1);
+    echo json_encode(['result' => 'failed', 'message' => $error instanceof JsonException ? 'Invalid JSON configuration' : $error->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+    // configd script_output replaces stdout when the subprocess exits nonzero.
+    exit(in_array($action, ['validate', 'fetch', 'prepared', 'summary'], true) ? 0 : 1);
 }

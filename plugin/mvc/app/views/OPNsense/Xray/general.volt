@@ -1,6 +1,6 @@
 <link rel="stylesheet" href="/assets/xray/editor.css">
-<script src="/assets/xray/editor.js"></script>
-<script src="/assets/xray/dialog.js"></script>
+<script src="/assets/xray/editor.js?rev=dialog-fixes-1"></script>
+<script src="/assets/xray/dialog.js?rev=dialog-fixes-1"></script>
 <script src="/assets/xray/health.js"></script>
 {{ partial('OPNsense/Xray/partials/scripts') }}
 

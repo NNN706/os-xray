@@ -25,6 +25,15 @@ test('Full configuration dialog, unsaved validation and subscription choices',as
    await page.locator('#xray-validate').click();await page.waitForFunction(()=>document.getElementById('xray-validation-result').textContent==='Effective configuration is valid');
    assert.equal(JSON.parse(lastValidation.config_json).remarks,'Unsaved');assert.equal(lastValidation.use_config_dns,false);assert.ok(await page.locator('.xray-dns-disabled').count());
   });
+  await t.test('reopening a profile loads saved JSON, not stale unsaved editor text',async()=>{
+   await page.evaluate(value=>{
+    $('#DialogInstance').trigger('show.bs.modal');
+    window.XrayDialogLoad({frm_DialogInstance:{instance:{config_json:JSON.stringify(value)}}});
+    $('#DialogInstance').trigger('shown.bs.modal');
+   },fixture);
+   assert.deepEqual(await page.evaluate(()=>JSON.parse(dialogEditor.getValue())),fixture);
+   assert.equal(await page.locator('[id="instance.subscription_url"]').isVisible(),false);
+  });
   await t.test('multiple URL profiles require an explicit choice by remarks',async()=>{
    await page.locator('#xray-import').click();await page.locator('#xray-import-input').fill('https://example.test/subscription');await page.locator('#xray-import-read').click();await page.waitForFunction(()=>document.querySelectorAll('#xray-import-choice option').length===3);
    assert.equal(await page.evaluate(()=>JSON.parse(dialogEditor.getValue()).remarks),'Unsaved');await page.locator('#xray-import-choice').selectOption('1');assert.equal(await page.evaluate(()=>JSON.parse(dialogEditor.getValue()).remarks),'Second');assert.equal(await page.locator('[id="instance.name"]').inputValue(),'Second');
