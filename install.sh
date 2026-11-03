@@ -52,7 +52,10 @@ if [ "$#" = 0 ] && [ ! -f "$RELEASE_ROOT/VERSION" ]; then
     download 'https://codeload.github.com/NNN706/os-xray/tar.gz/a408aa82420c05f26c6555ee99144e0d0fe0539a' "$stage/os-xray.tar.gz"
     verify_sha "$stage/os-xray.tar.gz" '7224f3809bbd577f14e35b582a1865776f617770a55cb336f167f0c69c6f27d3'
     /usr/bin/tar -xzf "$stage/os-xray.tar.gz" -C "$stage" || die "Cannot extract plugin bundle."
-    /bin/sh "$stage/os-xray-a408aa82420c05f26c6555ee99144e0d0fe0539a/install.sh"
+    bundle="$stage/os-xray-a408aa82420c05f26c6555ee99144e0d0fe0539a"
+    # Use the current installer, not the obsolete installer inside the pinned payload.
+    install -m 0600 "$0" "$bundle/install.sh"
+    /bin/sh "$bundle/install.sh"
     exit
 fi
 [ -s "$RELEASE_ROOT/VERSION" ] || die "Extract the complete release archive before running install.sh (VERSION is missing)."
@@ -60,7 +63,7 @@ PLUGIN_VERSION="$(cat "$RELEASE_ROOT/VERSION")"
 
 
 refresh_cron() {
-    /usr/local/bin/php -r 'set_include_path("/usr/local/etc/inc" . PATH_SEPARATOR . get_include_path()); require_once("config.inc"); require_once("system.inc"); require_once("plugins.inc"); system_cron_configure();'
+    /usr/local/sbin/configctl cron restart || die "Cannot refresh OPNsense cron; check configd and rerun the installer."
 }
 if [ "${1:-}" = "uninstall" ]; then
     if [ -x /usr/local/opnsense/scripts/Xray/xray-service-control.php ]; then
@@ -85,6 +88,79 @@ fi
 [ ! -L /var/tmp/xray-api ] || die "Private API directory must not be a symlink."
 
 [ -x /usr/local/bin/php ] || die "OPNsense PHP is missing."
+visit_layout() {
+    "$1" "$PLUGIN_DIR/scripts/Xray" /usr/local/opnsense/scripts/Xray 0755
+    "$1" "$PLUGIN_DIR/service/conf/actions.d" /usr/local/opnsense/service/conf/actions.d 0644
+    "$1" "$PLUGIN_DIR/mvc/app/models/OPNsense/Xray" /usr/local/opnsense/mvc/app/models/OPNsense/Xray 0644
+    "$1" "$PLUGIN_DIR/mvc/app/controllers/OPNsense/Xray" /usr/local/opnsense/mvc/app/controllers/OPNsense/Xray 0644
+    "$1" "$PLUGIN_DIR/mvc/app/views/OPNsense/Xray" /usr/local/opnsense/mvc/app/views/OPNsense/Xray 0644
+    "$1" "$PLUGIN_DIR/etc/inc/plugins.inc.d" /usr/local/etc/inc/plugins.inc.d 0644
+    "$1" "$PLUGIN_DIR/etc/rc.syshook.d/start" /usr/local/etc/rc.syshook.d/start 0755
+    "$1" "$PLUGIN_DIR/etc/newsyslog.conf.d" /usr/local/etc/newsyslog.conf.d 0644
+    "$1" "$PLUGIN_DIR/www/assets/xray" /usr/local/www/assets/xray 0644
+}
+inspect_tree() {
+    [ -d "$1" ] || die "Missing plugin source directory: $1"
+    find "$1" -type f -exec /bin/sh -ec '
+        src=$1; dst=$2; shift 3
+        for item do
+            rel=${item#"$src"/}
+            target="$dst/$rel"
+            parent="$target"
+            while [ "$parent" != / ]; do
+                if [ -L "$parent" ]; then
+                    echo "ERROR: Symlink in os-xray destination: $parent. Inspect it manually." >&2
+                    exit 1
+                fi
+                parent=$(dirname "$parent")
+            done
+            if [ -e "$target" ]; then
+                [ -f "$target" ] || { echo "ERROR: Expected a file: $target" >&2; exit 1; }
+                if owner=$(/usr/local/sbin/pkg which -q "$target" 2>/dev/null); then
+                    echo "ERROR: $target belongs to package $owner. Resolve package ownership before retrying; no packages were removed." >&2
+                    exit 1
+                fi
+                if ! cmp -s "$item" "$target"; then
+                    printf "%s\n" "$target"
+                fi
+            fi
+        done
+    ' sh "$@" {} +
+}
+new_stage
+visit_layout inspect_tree > "$stage/conflicts" || die "Unsafe os-xray destination; installation stopped before copying files."
+for marker in "$VERSION_FILE" /usr/local/opnsense/scripts/Xray/version.txt; do
+    [ ! -L "$marker" ] || die "Symlink in os-xray version file: $marker"
+    if [ -e "$marker" ]; then
+        [ -f "$marker" ] || die "Expected an os-xray version file: $marker"
+        if owner=$(/usr/local/sbin/pkg which -q "$marker" 2>/dev/null); then
+            die "$marker belongs to package $owner. Resolve package ownership before retrying."
+        fi
+        cmp -s "$RELEASE_ROOT/VERSION" "$marker" || printf '%s\n' "$marker" >> "$stage/conflicts"
+    fi
+done
+if [ -s "$stage/conflicts" ]; then
+    echo "Existing os-xray files differ from this build:"
+    cat "$stage/conflicts"
+    echo "Proposed action: back up the listed files and OPNsense config, then replace only the listed os-xray files and install any missing plugin files."
+    echo "Existing Xray/tun2socks binaries, profiles and interface assignments are retained."
+    if ! ( : </dev/tty ) 2>/dev/null; then
+        die "Interactive confirmation is required. Rerun from an SSH or local console."
+    fi
+    printf 'Back up and replace these os-xray files? [y/N] '
+    read -r answer </dev/tty || die "No confirmation received."
+    case "$answer" in y|Y|yes|YES) ;; *) echo "Cancelled; no installation files changed."; exit 0 ;; esac
+    backup=$(mktemp -d /root/os-xray-backup.XXXXXX) || die "Cannot create backup."
+    while IFS= read -r target; do
+        install -d -m 0700 "$backup$(dirname "$target")"
+        cp -p "$target" "$backup$target"
+    done < "$stage/conflicts"
+    install -m 0600 /conf/config.xml "$backup/config.xml"
+    echo "Backup saved to $backup"
+else
+    echo "No conflicting os-xray files found."
+fi
+
 xray=/usr/local/bin/xray-core
 t2s=/usr/local/tun2socks/tun2socks
 for binary in "$xray" "$t2s" /usr/local/bin/curl; do
@@ -97,7 +173,6 @@ done
 
 if [ ! -x "$xray" ] || [ ! -x "$t2s" ]; then
     [ "$(uname -m)" = amd64 ] || die "Automatic binary installation supports FreeBSD amd64; install compatible binaries manually."
-    new_stage
 fi
 if [ ! -x "$xray" ]; then
     download 'https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-freebsd-64.zip' "$stage/xray.zip"
@@ -144,28 +219,21 @@ install_tree() {
             rel=${item#"$src"/}
             target="$dst/$rel"
             install -d -m 0755 "$(dirname "$target")"
-            install -m "$mode" "$item" "$target"
+            if ! cmp -s "$item" "$target"; then
+                install -S -m "$mode" "$item" "$target"
+            fi
         done
     ' sh "$_src" "$_dst" "$_mode" {} +
 }
-install_tree "$PLUGIN_DIR/scripts/Xray" /usr/local/opnsense/scripts/Xray 0755
-install_tree "$PLUGIN_DIR/service/conf/actions.d" /usr/local/opnsense/service/conf/actions.d 0644
-install_tree "$PLUGIN_DIR/mvc/app/models/OPNsense/Xray" /usr/local/opnsense/mvc/app/models/OPNsense/Xray 0644
-install_tree "$PLUGIN_DIR/mvc/app/controllers/OPNsense/Xray" /usr/local/opnsense/mvc/app/controllers/OPNsense/Xray 0644
-install_tree "$PLUGIN_DIR/mvc/app/views/OPNsense/Xray" /usr/local/opnsense/mvc/app/views/OPNsense/Xray 0644
-install_tree "$PLUGIN_DIR/etc/inc/plugins.inc.d" /usr/local/etc/inc/plugins.inc.d 0644
-install_tree "$PLUGIN_DIR/etc/rc.syshook.d/start" /usr/local/etc/rc.syshook.d/start 0755
-install_tree "$PLUGIN_DIR/etc/newsyslog.conf.d" /usr/local/etc/newsyslog.conf.d 0644
-install_tree "$PLUGIN_DIR/www/assets/xray" /usr/local/www/assets/xray 0644
+visit_layout install_tree
 install -d -m 0700 -o www -g www /var/tmp/xray-api
 install -d -m 0700 /usr/local/etc/xray-core/profiles
 find /usr/local/etc/xray-core -maxdepth 1 -name 'config*.json' -type f -exec chmod 0600 {} +
 find /usr/local/tun2socks -maxdepth 1 -name 'config*.yaml' -type f -exec chmod 0600 {} +
 
 /usr/local/bin/php /usr/local/opnsense/scripts/Xray/xray-migrate.php || die "Migration failed; original source fields retained."
-install -m 0644 "$RELEASE_ROOT/VERSION" /usr/local/opnsense/scripts/Xray/version.txt
-echo "$PLUGIN_VERSION" > "$VERSION_FILE"
-chmod 0644 "$VERSION_FILE"
+install -S -m 0644 "$RELEASE_ROOT/VERSION" /usr/local/opnsense/scripts/Xray/version.txt
+install -S -m 0644 "$RELEASE_ROOT/VERSION" "$VERSION_FILE"
 service configd restart
 refresh_cron
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml
