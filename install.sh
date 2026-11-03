@@ -1,15 +1,54 @@
 #!/bin/sh
-# Install the bundled plugin; dependencies and live tunnel changes are explicit.
+# Install the bundled plugin and provision missing dependencies.
 set -eu
 umask 077
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+export PATH
 RELEASE_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PLUGIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/plugin"
 VERSION_FILE="/usr/local/opnsense/mvc/app/models/OPNsense/Xray/version.txt"
 die() { echo "ERROR: $*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || die "Run this installer as root on OPNsense."
+[ "$(uname -s)" = FreeBSD ] && [ -f /usr/local/etc/inc/config.inc ] || die "OPNsense/FreeBSD required."
+
+stage=
+cleanup() {
+    if [ -n "$stage" ]; then
+        find "$stage" -depth -delete
+    fi
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+new_stage() {
+    stage=$(mktemp -d /var/tmp/os-xray-install.XXXXXX) || die "Cannot create staging directory."
+}
+download() {
+    echo "Downloading $1 ..."
+    /usr/bin/fetch -o "$2" "$1" || die "Download failed: $1"
+}
+verify_sha() {
+    [ "$(sha256 -q "$1")" = "$2" ] || die "SHA-256 mismatch: $1"
+    echo "SHA-256 verified: ${1##*/}"
+}
+
+if [ "${1:-}" = --release ]; then
+    [ "$#" = 2 ] || die "Usage: sh install.sh --release vVERSION"
+    tag=$2
+    printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$' || die "Invalid release tag."
+    new_stage
+    archive="os-xray-$tag.tar.gz"
+    base="https://github.com/NNN706/os-xray/releases/download/$tag"
+    download "$base/$archive" "$stage/$archive"
+    download "$base/SHA256SUMS" "$stage/SHA256SUMS"
+    hash=$(awk -v name="$archive" '$2 == name {print $1}' "$stage/SHA256SUMS")
+    verify_sha "$stage/$archive" "$hash"
+    /usr/bin/tar -xf "$stage/$archive" -C "$stage" || die "Cannot extract release."
+    /bin/sh "$stage/os-xray-$tag/install.sh"
+    exit
+fi
 [ -s "$RELEASE_ROOT/VERSION" ] || die "Extract the complete release archive before running install.sh (VERSION is missing)."
 PLUGIN_VERSION="$(cat "$RELEASE_ROOT/VERSION")"
-[ "$(id -u)" = 0 ] || die "Run this installer as root on OPNsense."
-[ -f /usr/local/etc/inc/config.inc ] || die "OPNsense configuration framework not found."
+
 
 refresh_cron() {
     /usr/local/bin/php -r 'set_include_path("/usr/local/etc/inc" . PATH_SEPARATOR . get_include_path()); require_once("config.inc"); require_once("system.inc"); require_once("plugins.inc"); system_cron_configure();'
@@ -32,12 +71,60 @@ if [ "${1:-}" = "uninstall" ]; then
     echo "Plugin removed. Saved profiles, applied snapshots and core binaries retained."
     exit 0
 fi
-[ -z "${1:-}" ] || die "Usage: sh install.sh [uninstall]"
-for binary in /usr/local/bin/php /usr/local/bin/xray-core /usr/local/tun2socks/tun2socks /usr/local/bin/curl; do
-    [ -x "$binary" ] || die "Required dependency is missing: $binary. Install it before running this installer."
-done
+[ -z "${1:-}" ] || die "Usage: sh install.sh [uninstall | --release vVERSION]"
 [ -s "$PLUGIN_DIR/www/assets/xray/editor.js" ] || die "Bundled editor missing; build the release with npm ci && npm run build."
 [ ! -L /var/tmp/xray-api ] || die "Private API directory must not be a symlink."
+
+[ -x /usr/local/bin/php ] || die "OPNsense PHP is missing."
+xray=/usr/local/bin/xray-core
+t2s=/usr/local/tun2socks/tun2socks
+for binary in "$xray" "$t2s" /usr/local/bin/curl; do
+    if [ -x "$binary" ]; then
+        echo "Already installed: $binary (keeping existing file)"
+    elif [ -e "$binary" ] || [ -L "$binary" ]; then
+        die "Existing dependency is not executable: $binary; resolve it before retrying."
+    fi
+done
+
+if [ ! -x "$xray" ] || [ ! -x "$t2s" ]; then
+    [ "$(uname -m)" = amd64 ] || die "Automatic binary installation supports FreeBSD amd64; install compatible binaries manually."
+    new_stage
+fi
+if [ ! -x "$xray" ]; then
+    download 'https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-freebsd-64.zip' "$stage/xray.zip"
+    verify_sha "$stage/xray.zip" '31de1013a74b170ed709f8bc51eae9880296566e8247c0d8b9d5846661d0842b'
+    for member in xray geoip.dat geosite.dat; do
+        /usr/bin/tar -xOf "$stage/xray.zip" "$member" > "$stage/$member"
+        [ -s "$stage/$member" ] || die "Missing Xray archive member: $member"
+    done
+fi
+if [ ! -x "$t2s" ]; then
+    download 'https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.0/tun2socks-freebsd-amd64.zip' "$stage/tun2socks.zip"
+    verify_sha "$stage/tun2socks.zip" '3ebb747aa83ee3157330beb324bbeaf9a742db6a8d24b9bbc96a4125aaeeeaea'
+    /usr/bin/tar -xOf "$stage/tun2socks.zip" tun2socks-freebsd-amd64 > "$stage/tun2socks"
+    [ -s "$stage/tun2socks" ] || die "Missing tun2socks binary."
+fi
+if [ ! -x /usr/local/bin/curl ]; then
+    echo "Installing curl from configured OPNsense package repositories ..."
+    /usr/local/sbin/pkg install -U -y curl || die "Cannot install curl from configured repositories."
+    [ -x /usr/local/bin/curl ] || die "curl executable missing after package installation."
+fi
+if [ ! -x "$xray" ]; then
+    install -d -m 0755 /usr/local/share/xray
+    for member in geoip.dat geosite.dat; do
+        if [ ! -e "/usr/local/share/xray/$member" ] && [ ! -L "/usr/local/share/xray/$member" ]; then
+            install -m 0644 "$stage/$member" "/usr/local/share/xray/$member"
+        fi
+    done
+    install -S -m 0755 "$stage/xray" "$xray"
+    echo "Installed Xray-core v26.10.31: $xray"
+fi
+if [ ! -x "$t2s" ]; then
+    install -d -m 0755 /usr/local/tun2socks
+    install -S -m 0755 "$stage/tun2socks" "$t2s"
+    echo "Installed tun2socks v2.7.0: $t2s"
+fi
+echo "Registering os-xray files and services in OPNsense ..."
 
 install_tree() {
     _src="$1"; _dst="$2"; _mode="$3"

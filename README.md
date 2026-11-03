@@ -16,6 +16,8 @@
 
 The plugin does not replace Unbound, change the system DNS, install BIRD/DNSTAP or modify unrelated gateway settings and the global default route.
 
+> **Development installer:** Installs missing Xray-core and tun2socks from pinned FreeBSD amd64 archives after verifying SHA-256, and installs missing curl via configured OPNsense repositories. Existing executables are kept. Run the updated checkout's `sh install.sh` to install its bundled files, or `sh install.sh --release vVERSION` to download, verify and install a published version. That mode runs the selected release's own installer. The published rc.1 below still requires manual dependencies.
+
 ## Before you install
 
 Use an isolated OPNsense router with a configuration backup and console access. This is an installation archive, **not a native `.pkg` package**.
