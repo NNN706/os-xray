@@ -5,7 +5,7 @@
     <!-- v3.0.0: ArrayField multi-instance + vless_uuid rename (breaking change от v2.x) -->
     <!-- Каждый инстанс получает уникальный UUID от OPNsense BaseModel. -->
     <!-- Миграция: install.sh конвертирует <instance> → <instances><instance uuid="...">, uuid → vless_uuid -->
-    <version>3.0.0</version>
+    <version>4.0.0</version>
     <items>
         <instance type="ArrayField">
             <enabled type="BooleanField">
@@ -62,6 +62,29 @@
                     <none>none</none>
                 </OptionValues>
             </loglevel>
+            <config_json type="TextField"><Required>N</Required><Default></Default></config_json>
+            <use_config_dns type="BooleanField"><Required>N</Required><Default>1</Default></use_config_dns>
+            <socks_inbound type="TextField"><Required>N</Required><Default></Default></socks_inbound>
+            <subscription_url type="TextField"><Required>N</Required><Default></Default></subscription_url>
+            <subscription_remarks type="TextField"><Required>N</Required><Default></Default></subscription_remarks>
+            <subscription_metadata type="TextField"><Required>N</Required><Default>{}</Default></subscription_metadata>
+            <subscription_baseline type="TextField"><Required>N</Required><Default></Default></subscription_baseline>
+            <subscription_hash type="TextField"><Required>N</Required><Default></Default></subscription_hash>
+            <subscription_fetched type="TextField"><Required>N</Required><Default>0</Default></subscription_fetched>
+            <auto_update type="BooleanField"><Required>N</Required><Default>0</Default></auto_update>
+            <update_mode type="TextField"><Required>N</Required><Default>subscription</Default></update_mode>
+            <update_hours type="IntegerField"><Required>N</Required><Default>1</Default><MinimumValue>1</MinimumValue><MaximumValue>24</MaximumValue></update_hours>
+            <health_enabled type="BooleanField"><Required>N</Required><Default>0</Default></health_enabled>
+            <health_interval type="IntegerField"><Required>N</Required><Default>60</Default></health_interval>
+            <health_bypass type="BooleanField"><Required>N</Required><Default>0</Default></health_bypass>
+            <routing_mode type="TextField"><Required>N</Required><Default>off</Default></routing_mode>
+            <routing_rules type="TextField"><Required>N</Required><Default></Default></routing_rules>
+            <routing_cidrs type="TextField"><Required>N</Required><Default></Default></routing_cidrs>
+            <routing_asns type="TextField"><Required>N</Required><Default></Default></routing_asns>
+            <routing_tun4 type="TextField"><Required>N</Required><Default></Default></routing_tun4>
+            <routing_wan4 type="TextField"><Required>N</Required><Default></Default></routing_wan4>
+            <routing_tun6 type="TextField"><Required>N</Required><Default></Default></routing_tun6>
+            <routing_wan6 type="TextField"><Required>N</Required><Default></Default></routing_wan6>
         </instance>
     </items>
 </model>

@@ -4,6 +4,7 @@ namespace OPNsense\Xray\Api;
 
 use OPNsense\Base\ApiMutableServiceControllerBase;
 use OPNsense\Core\Backend;
+require_once __DIR__ . '/XrayRequest.php';
 
 /**
  * Service control: start / stop / reconfigure / status / log / testconnect.
@@ -23,7 +24,8 @@ class ServiceController extends ApiMutableServiceControllerBase
      */
     private function sanitizeUuid(string $uuid): string
     {
-        return preg_replace('/[^0-9a-fA-F\-]/', '', $uuid);
+        if ($uuid !== '' && !preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/Di', $uuid)) { throw new \OPNsense\Base\UserException('Invalid profile UUID'); }
+        return strtolower($uuid);
     }
 
     /**
@@ -169,16 +171,11 @@ class ServiceController extends ApiMutableServiceControllerBase
         if (!$this->request->isPost()) {
             return ['result' => 'failed', 'message' => 'POST required'];
         }
-        $uuid    = $this->sanitizeUuid((string)$uuid);
-        $cmd     = 'xray validate' . ($uuid !== '' ? ' ' . $uuid : '');
-        $backend = new Backend();
-        $output  = trim($backend->configdRun($cmd));
-        $ok      = stripos($output, 'OK')    !== false
-                && stripos($output, 'ERROR') === false;
-        return [
-            'result'  => $ok ? 'ok' : 'failed',
-            'message' => $output ?: 'No response from configd',
-        ];
+        $body = $this->request->getJsonRawBody(true);
+        if (!is_array($body) || !isset($body['config_json'])) {
+            return ['result' => 'failed', 'message' => 'Current editor JSON is required'];
+        }
+        return XrayRequest::run('draftvalidate', $body);
     }
 
     /**
@@ -220,7 +217,7 @@ class ServiceController extends ApiMutableServiceControllerBase
     public function testconnectAction($uuid = '')
     {
         if (!$this->request->isPost()) {
-            return ['result' => 'failed', 'message' => 'POST required'];
+            return ['result' => 'failed', 'http_code' => 0, 'latency_ms' => null, 'timed_out' => false, 'message' => 'POST required'];
         }
 
         $uuid    = $this->sanitizeUuid((string)$uuid);
@@ -228,21 +225,15 @@ class ServiceController extends ApiMutableServiceControllerBase
         $backend = new Backend();
         $output  = trim($backend->configdRun($cmd));
 
-        $httpCode = (int)$output;
-        if ($httpCode >= 200 && $httpCode < 400) {
-            return [
-                'result'    => 'ok',
-                'http_code' => $httpCode,
-                'message'   => "OK ({$httpCode}) — connection works",
-            ];
-        }
-
-        return [
-            'result'    => 'failed',
-            'http_code' => $httpCode,
-            'message'   => $httpCode === 0
-                ? 'Could not connect — xray-core may be stopped or port unreachable'
-                : "HTTP {$httpCode} — unexpected response from 1.1.1.1",
-        ];
+        $decoded = json_decode($output, true);
+        return is_array($decoded) ? $decoded : ['result' => 'failed', 'http_code' => 0, 'latency_ms' => null, 'timed_out' => false, 'message' => 'No valid response from connection check'];
+    }
+    public function healthAction()
+    {
+        return json_decode((new Backend())->configdRun('xray healthstatus'), true) ?: ['result'=>'failed', 'message'=>'Health status unavailable'];
+    }
+    public function routingOptionsAction()
+    {
+        return json_decode((new Backend())->configdRun('xray routingoptions'), true) ?: ['result'=>'failed', 'message'=>'Routing options unavailable'];
     }
 }

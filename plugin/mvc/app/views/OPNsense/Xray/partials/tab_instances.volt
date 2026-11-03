@@ -1,6 +1,8 @@
 <!-- INSTANCES -->
 <div id="instances" class="tab-pane fade in active">
 
+    <p class="alert alert-info">{{ lang._('One active tunnel. Each profile may contain multiple outbounds, routing balancers and observatory settings.') }}</p>
+
     {# ── Service toolbar ─────────────────────────────────────────────── #}
     <div class="row">
         <section class="col-xs-12">
@@ -18,29 +20,35 @@
                 {# Global service controls #}
                 <div style="display: flex; gap: 4px;">
                     <button id="btnStartAll" class="btn btn-xs btn-success"
-                            title="{{ lang._('Start all enabled instances') }}">
-                        <i class="fa fa-play fa-fw"></i> {{ lang._('Start All') }}
+                            title="{{ lang._('Start the current or only enabled profile; use a row Start button to switch profiles') }}">
+                        <i class="fa fa-play fa-fw"></i> {{ lang._('Start') }}
                     </button>
                     <button id="btnStopAll" class="btn btn-xs btn-danger"
-                            title="{{ lang._('Stop all running instances') }}">
-                        <i class="fa fa-stop fa-fw"></i> {{ lang._('Stop All') }}
+                            title="{{ lang._('Stop the active tunnel') }}">
+                        <i class="fa fa-stop fa-fw"></i> {{ lang._('Stop') }}
                     </button>
                     <button id="btnRestartAll" class="btn btn-xs btn-warning"
-                            title="{{ lang._('Restart all running instances') }}">
-                        <i class="fa fa-refresh fa-fw"></i> {{ lang._('Restart All') }}
+                            title="{{ lang._('Reconnect the active profile and apply its prepared JSON') }}">
+                        <i class="fa fa-refresh fa-fw"></i> {{ lang._('Reconnect') }}
                     </button>
                 </div>
 
                 <div style="width: 1px; height: 22px; background: #ddd;"></div>
 
                 <button id="btnTestConnect" class="btn btn-xs btn-default"
-                        title="{{ lang._('Test connectivity through all running instances') }}">
-                    <i class="fa fa-plug fa-fw"></i> {{ lang._('Test All') }}
+                        title="{{ lang._('Test through the active Routing and balancer') }}">
+                    <i class="fa fa-plug fa-fw"></i> {{ lang._('Test') }}
                 </button>
                 <span id="testConnectResult" style="font-size: 12px;"></span>
 
             </div>
         </section>
+    </div>
+
+    <div class="alert alert-info" id="xray-health-panel" role="status">
+        <strong>Health check / Heartbeat</strong><div id="xray-health-summary">Loading…</div>
+        <div id="xray-health-components"></div><div id="xray-health-last"></div>
+        <details><summary>Recent checks</summary><pre id="xray-health-history"></pre></details>
     </div>
 
     {# ── Instances grid ──────────────────────────────────────────────── #}

@@ -1,61 +1,20 @@
 #!/usr/local/bin/php
 <?php
-/**
- * xray-testconnect.php — BUG-4 FIX: тест подключения через SOCKS5-прокси.
- *
- * До исправления: порт 10808 был захардкожен в actions_xray.conf:
- *   parameters:--socks5 127.0.0.1:10808 -s -L ...
- * Проблема: если пользователь изменил socks5_port в GUI, тест продолжал
- * стучаться на старый порт и всегда возвращал ошибку подключения.
- *
- * После: читаем socks5_port из config.xml — тест всегда использует актуальный порт.
- */
-
-require_once('config.inc');
-
-// UUID инстанса как первый аргумент (из actions_xray.conf %1)
-$instUuid = isset($argv[1]) ? preg_replace('/[^0-9a-fA-F\-]/', '', trim($argv[1])) : '';
-
-$cfg = OPNsense\Core\Config::getInstance()->object();
-$ins = $cfg->OPNsense->xray->instances ?? null;
-
-$inst = null;
-if ($ins) {
-    foreach ($ins->instance as $candidate) {
-        if ($instUuid === '' || (string)$candidate['uuid'] === $instUuid) {
-            $inst = $candidate;
-            if ($instUuid !== '') break;
-        }
-    }
-}
-
-// Читаем адрес и порт из конфига найденного инстанса
-$listen = (string)($inst->socks5_listen ?? '127.0.0.1') ?: '127.0.0.1';
-$port   = (int)(string)($inst->socks5_port ?? 10808);
-
-// Защита: порт должен быть в допустимом диапазоне
-if ($port < 1 || $port > 65535) {
-    $port = 10808;
-}
-
-// 0.0.0.0 слушает на всех интерфейсах — для теста подключаемся на loopback
-$connectAddr = ($listen === '0.0.0.0') ? '127.0.0.1' : $listen;
-$proxy   = $connectAddr . ':' . $port;
-$target  = 'https://1.1.1.1';
-$timeout = '10';
-
-exec(
-    '/usr/local/bin/curl'
-    . ' --socks5 ' . escapeshellarg($proxy)
-    . ' -s -L -o /dev/null'
-    . ' -w %{http_code}'
-    . ' ' . escapeshellarg($target)
-    . ' --max-time ' . $timeout,
-    $out,
-    $rc
-);
-
-echo implode('', $out) . "\n";
-
-// TODO return parsed result as now it done in ServiceController
-exit($rc);
+set_include_path('/usr/local/etc/inc' . PATH_SEPARATOR . get_include_path());
+require_once 'config.inc';
+require_once __DIR__ . '/xray-store.inc.php';
+require_once __DIR__ . '/xray-process.inc.php';
+require_once __DIR__ . '/xray-probe.inc.php';
+umask(0077);
+$result = ['result' => 'failed', 'http_code' => 0, 'latency_ms' => null, 'timed_out' => false, 'message' => 'No active tunnel'];
+try {
+    $id = $argv[1] ?? '';
+    $path = '/usr/local/etc/xray-core/active.json';
+    $active = is_file($path) ? json_decode(file_get_contents($path), true, 128, JSON_THROW_ON_ERROR) : null;
+    if (!$active || ($id !== '' && $id !== '%1' && $id !== '%s' && $active['inst_uuid'] !== $id)) { throw new RuntimeException('No active tunnel for this profile'); }
+    $uuid = $active['inst_uuid'];
+    if (!XrayProcess::alive('/var/run/xray_core_' . $uuid . '.pid', '/usr/local/bin/xray-core', '/usr/local/etc/xray-core/config-' . $uuid . '.json') || !XrayProcess::alive('/var/run/tun2socks_' . $uuid . '.pid', '/usr/local/tun2socks/tun2socks', '/usr/local/tun2socks/config-' . $uuid . '.yaml')) { throw new RuntimeException('Active tunnel is stopped'); }
+    $meta = $active['test_metadata'] ?? [];
+    $result = XrayProbe::run($active['socks'], $meta['check_url'] ?? XrayProbe::TARGET, ($meta['ping_type'] ?? 'proxy-head') === 'proxy' ? 'GET' : 'HEAD', 1000, null);
+} catch (Throwable $error) { $result['message'] = $error instanceof JsonException ? 'Invalid applied configuration' : $error->getMessage(); }
+echo json_encode($result) . "\n";

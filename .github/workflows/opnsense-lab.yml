@@ -1,0 +1,34 @@
+name: OPNsense isolated lab (read-only preflight)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: opnsense-isolated-lab
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: [self-hosted, linux, opnsense-lab]
+    environment: opnsense-lab
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only check over verified SSH (no deployment)
+        env:
+          LAB_SSH_KEY: ${{ secrets.LAB_SSH_KEY }}
+          LAB_KNOWN_HOSTS: ${{ secrets.LAB_KNOWN_HOSTS }}
+          LAB_SSH_TARGET: ${{ secrets.LAB_SSH_TARGET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$LAB_SSH_KEY"
+          test -n "$LAB_KNOWN_HOSTS"
+          test -n "$LAB_SSH_TARGET"
+          task_ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$task_ssh_dir"' EXIT
+          printf '%s\n' "$LAB_SSH_KEY" > "$task_ssh_dir/key"
+          printf '%s\n' "$LAB_KNOWN_HOSTS" > "$task_ssh_dir/known_hosts"
+          ssh -T -i "$task_ssh_dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$task_ssh_dir/known_hosts" -o ConnectTimeout=10 -- "$LAB_SSH_TARGET" '/usr/local/bin/php' < tests/system/preflight.php

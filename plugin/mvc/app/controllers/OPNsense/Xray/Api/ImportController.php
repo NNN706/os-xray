@@ -1,11 +1,20 @@
 <?php
 
 namespace OPNsense\Xray\Api;
+require_once __DIR__ . '/XrayRequest.php';
+require_once '/usr/local/opnsense/scripts/Xray/xray-config.inc.php';
 
 use OPNsense\Base\ApiControllerBase;
 
 class ImportController extends ApiControllerBase
 {
+    public function subscriptionAction()
+    {
+        if (!$this->request->isPost()) { return ['result' => 'failed', 'message' => 'POST required']; }
+        $body = $this->request->getJsonRawBody(true);
+        return XrayRequest::run('subscriptionfetch', ['url' => (string)($body['url'] ?? '')]);
+    }
+
     public function parseAction()
     {
         if (!$this->request->isPost()) {
@@ -28,6 +37,10 @@ class ImportController extends ApiControllerBase
             return ['status' => 'error', 'message' => $data['error']];
         }
 
+        $outbound = json_decode($data['outbound_config']);
+        $full = \XrayConfig::wrap($outbound, '127.0.0.1', 10808, '', 'warning', true);
+        if ($data['name'] !== '') { $full->remarks = $data['name']; }
+        $data['config_json'] = \XrayConfig::encode($full);
         $data['status'] = 'ok';
         return $data;
     }
@@ -92,7 +105,7 @@ class ImportController extends ApiControllerBase
         // Отделяем #name в конце
         $name = '';
         if (($hashPos = strrpos($rest, '#')) !== false) {
-            $name = htmlspecialchars(urldecode(substr($rest, $hashPos + 1)), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $name = rawurldecode(substr($rest, $hashPos + 1));
             $rest = substr($rest, 0, $hashPos);
         }
 
@@ -132,7 +145,7 @@ class ImportController extends ApiControllerBase
         }
 
         $port = (int)$portStr;
-        if ($port <= 0 || $port > 65535) {
+        if (!preg_match('/^[0-9]+$/D', $portStr) || $port <= 0 || $port > 65535) {
             return ['error' => 'Invalid port: ' . $portStr];
         }
 
@@ -154,13 +167,14 @@ class ImportController extends ApiControllerBase
         parse_str($query, $params);
 
         $type     = $params['type']     ?? 'tcp';
-        $security = $params['security'] ?? 'reality';
+        $security = $params['security'] ?? 'none';
+        if (!in_array($type, ['tcp', 'raw', 'xhttp', 'ws', 'grpc', 'kcp', 'httpupgrade'], true) || !in_array($security, ['none', 'tls', 'reality'], true)) {
+            return ['error' => 'Unsupported transport or security; use a full JSON configuration'];
+        }
+        foreach ($params as $value) { if (!is_string($value)) { return ['error' => 'Invalid VLESS parameter']; } }
 
         $flow = $params['flow'] ?? '';
-        if (empty($flow)) {
-            $flow = 'xtls-rprx-vision';
-        }
-        if ($type !== 'tcp') {
+        if (!in_array($type, ['tcp', 'raw'], true)) {
             $flow = '';
         }
 
@@ -170,10 +184,12 @@ class ImportController extends ApiControllerBase
         }
 
         // flow and fp whitelisted to known values (RCE/injection guard)
-        $allowedFlow = ['xtls-rprx-vision', 'none', ''];
+        $allowedFlow = ['xtls-rprx-vision', ''];
         $allowedFp   = ['chrome', 'firefox', 'safari', 'edge', 'random'];
-        $flow = in_array($flow, $allowedFlow, true) ? $flow : 'xtls-rprx-vision';
+        $flow = in_array($flow, $allowedFlow, true) ? $flow : '';
         $fp   = in_array($fp,   $allowedFp,   true) ? $fp   : 'chrome';
+
+        $params['fp'] = $fp;
 
         // Build outbound object — raw values (json_encode handles escaping)
         $outbound = [
@@ -240,10 +256,14 @@ class ImportController extends ApiControllerBase
                 if (!empty($xhttp)) $ss['xhttpSettings'] = $xhttp;
                 break;
 
+            case 'httpupgrade':
+                $ss['httpupgradeSettings'] = ['path' => $params['path'] ?? '/', 'host' => $params['host'] ?? ''];
+                break;
+
             case 'ws':
                 $ws = [];
                 if (!empty($params['path'])) $ws['path'] = $params['path'];
-                if (!empty($params['host'])) $ws['headers'] = ['Host' => $params['host']];
+                if (!empty($params['host'])) $ws['host'] = $params['host'];
                 if (!empty($ws)) $ss['wsSettings'] = $ws;
                 break;
 
@@ -269,6 +289,7 @@ class ImportController extends ApiControllerBase
                 if (!empty($kcp)) $ss['kcpSettings'] = $kcp;
                 break;
 
+            case 'raw':
             case 'tcp':
                 if (!empty($params['headerType']) && $params['headerType'] === 'http') {
                     $tcp = ['header' => ['type' => 'http']];

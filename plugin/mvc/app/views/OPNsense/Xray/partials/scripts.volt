@@ -46,6 +46,7 @@
 
         // ── Instances CRUD table (UIBootgrid) ───────────────────────
         $('#grid-instances').UIBootgrid({
+            onBeforeRenderDialog: function (payload) { return window.XrayDialogLoad(payload); },
             search: '/api/xray/instance/searchItem',
             get:    '/api/xray/instance/getItem/',
             set:    '/api/xray/instance/setItem/',
@@ -117,7 +118,8 @@
             var url = '/api/xray/service/' + action + (uuid ? '/' + encodeURIComponent(uuid) : '');
             $.ajax({
                 url: url, type: 'POST', dataType: 'json',
-                success: function () { setTimeout(refreshInstancesStatus, 1500); }
+                success: function (data) { if (data.result !== 'ok') { $('#testConnectResult').text(data.message || 'Service operation failed').addClass('text-danger'); } setTimeout(refreshInstancesStatus, 1500); },
+                error: function () { $('#testConnectResult').text('Service request failed').addClass('text-danger'); }
             });
         }
 
@@ -256,139 +258,6 @@
                         }
                     }
                 });
-            });
-        });
-
-        // ── Import VLESS (inside DialogInstance) ──────────────────
-        function applyImportToDialog(data) {
-            var $dlg = $('#DialogInstance');
-            if (data.name) {
-                $dlg.find('[id="instance.name"]').val(data.name);
-            }
-            $dlg.find('[id="instance.outbound_config"]').val(data.outbound_config || '');
-        }
-
-        // Inject Import panel + Validate button into DialogInstance on first open
-        var dialogInjected = false;
-        $('#DialogInstance').on('show.bs.modal', function () {
-            if (dialogInjected) {
-                // Reset state on each open
-                $('#dlgImportLink').val('');
-                $('#dlgImportResult').text('').removeClass('text-success text-danger');
-                $('#dlgImportPanel').collapse('hide');
-                $('#dlgValidateResult').text('').removeClass('text-success text-danger');
-                return;
-            }
-            dialogInjected = true;
-
-            // Import panel — collapsible, injected before the form table
-            var importHtml =
-                '<div style="margin: 0 0 10px;">' +
-                    '<a data-toggle="collapse" href="#dlgImportPanel" class="btn btn-sm btn-default" style="margin-bottom: 6px;">' +
-                        '<i class="fa fa-upload"></i> {{ lang._("Import VLESS link") }}' +
-                    '</a>' +
-                    '<div id="dlgImportPanel" class="collapse">' +
-                        '<div class="well well-sm" style="margin-bottom: 0;">' +
-                            '<div class="input-group">' +
-                                '<input type="text" id="dlgImportLink" class="form-control input-sm"' +
-                                '  style="font-family: monospace; font-size: 12px;"' +
-                                '  placeholder="vless://UUID@host:443?security=reality&pbk=...#Name" />' +
-                                '<span class="input-group-btn">' +
-                                    '<button type="button" id="dlgImportParseBtn" class="btn btn-sm btn-primary">' +
-                                        '<i class="fa fa-magic"></i> {{ lang._("Parse & Fill") }}' +
-                                    '</button>' +
-                                '</span>' +
-                            '</div>' +
-                            '<span id="dlgImportResult" style="font-size: 12px; display: inline-block; margin-top: 4px;"></span>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-            var $body = $(this).find('.modal-body');
-            $body.prepend(importHtml);
-
-            // Validate button — in footer, before Save
-            var validateHtml =
-                '<button type="button" id="dlgValidateBtn" class="btn btn-info pull-left">' +
-                    '<i class="fa fa-check-circle"></i> {{ lang._("Validate Config") }}' +
-                '</button>' +
-                '<span id="dlgValidateResult" class="pull-left" style="font-size: 12px; line-height: 34px; margin-left: 8px;"></span>';
-            var $footer = $(this).find('.modal-footer');
-            $footer.prepend(validateHtml);
-        });
-
-        // Import parse handler (inside dialog)
-        $(document).on('click', '#dlgImportParseBtn', function () {
-            var link = $.trim($('#dlgImportLink').val());
-            var $res = $('#dlgImportResult');
-            if (!link) {
-                $res.removeClass('text-success').addClass('text-danger')
-                    .text("{{ lang._('Paste a VLESS link first.') }}");
-                return;
-            }
-
-            var $btn = $(this).prop('disabled', true);
-            $res.removeClass('text-success text-danger').text("{{ lang._('Parsing...') }}");
-            var b64 = btoa(unescape(encodeURIComponent(link)));
-
-            $.ajax({
-                url:         '/api/xray/import/parse',
-                type:        'POST',
-                contentType: 'application/json; charset=utf-8',
-                data:        JSON.stringify({link_b64: b64}),
-                dataType:    'json',
-                success: function (data) {
-                    $btn.prop('disabled', false);
-                    if (data.status !== 'ok') {
-                        $res.removeClass('text-success').addClass('text-danger')
-                            .text("{{ lang._('Parse error:') }} " + (data.message || 'unknown'));
-                        return;
-                    }
-                    applyImportToDialog(data);
-                    $res.removeClass('text-danger').addClass('text-success')
-                        .text("{{ lang._('Imported! Fields filled from link.') }}");
-                    // Collapse import panel after success
-                    setTimeout(function () { $('#dlgImportPanel').collapse('hide'); }, 1500);
-                },
-                error: function (xhr) {
-                    $btn.prop('disabled', false);
-                    $res.removeClass('text-success').addClass('text-danger')
-                        .text("{{ lang._('HTTP error:') }} " + xhr.status);
-                }
-            });
-        });
-
-        // Enter key in import field triggers parse
-        $(document).on('keypress', '#dlgImportLink', function (e) {
-            if (e.which === 13) {
-                e.preventDefault();
-                $('#dlgImportParseBtn').click();
-            }
-        });
-
-        // ── Validate Config (inside DialogInstance footer) ────────
-        $(document).on('click', '#dlgValidateBtn', function () {
-            var $btn = $(this).prop('disabled', true);
-            var $res = $('#dlgValidateResult');
-            $res.removeClass('text-success text-danger').text("{{ lang._('Validating...') }}");
-
-            $.ajax({
-                url:      '/api/xray/service/validate',
-                type:     'POST',
-                dataType: 'json',
-                success: function (data) {
-                    $btn.prop('disabled', false);
-                    if (data.result === 'ok') {
-                        $res.removeClass('text-danger').addClass('text-success')
-                            .text(data.message || "{{ lang._('Config is valid') }}");
-                    } else {
-                        $res.removeClass('text-success').addClass('text-danger')
-                            .text(data.message || "{{ lang._('Validation failed') }}");
-                    }
-                },
-                error: function (xhr) {
-                    $btn.prop('disabled', false);
-                    $res.addClass('text-danger').text("{{ lang._('HTTP error:') }} " + xhr.status);
-                }
             });
         });
 
