@@ -45,6 +45,7 @@ rejects(fn() => XraySubscription::select([$a,$b],''), 'Multi-profile update cann
 $dir = sys_get_temp_dir() . '/xray-test-' . bin2hex(random_bytes(8)); mkdir($dir,0700);
 try {
     $cron = xray_cron();
+    check(count($cron) === 4 && count(array_filter($cron, fn($entry) => $entry['autocron'][1] === '*')) === 4, 'All four OPNsense autocron jobs run every minute');
     check(in_array(['autocron' => ['/usr/local/sbin/configctl xray trimlogs', '*']], $cron, true), 'Xray journals are trimmed every minute');
     // Launch with the absolute executable path: PHP_BINARY can differ from a CLI alias on Linux.
     $child=proc_open([PHP_BINARY, '-r', 'usleep(2000000);', 'tests/config.php'], [0=>['file','/dev/null','r'],1=>['file','/dev/null','w'],2=>['file','/dev/null','w']], $pipes);

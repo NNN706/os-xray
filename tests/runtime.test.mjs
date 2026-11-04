@@ -48,6 +48,20 @@ function test_socket_client($address,&$errno,&$error,$timeout) {$errno=0;$error=
   const runtime=()=>readFile(dir+'/conf/config-'+id+'.json','utf8'),pid=()=>readFile(dir+'/run/xray_core_'+id+'.pid','utf8');
   await config(fixture);
   await t.test('initial apply and correct tun2socks argument',async()=>{const r=await run(dir+'/control.php',['start',id]);assert.equal(r.code,0,r.out+r.err);assert.match(await readFile(dir+'/commands','utf8'),/tun2socks --config/);assert.equal(JSON.parse(await runtime()).routing.balancers[0].strategy.settings.expected,2);assert.equal(JSON.parse(await runtime()).log.access,dir+'/logs/access.log');});
+  await t.test('journal trim keeps the open append descriptor usable', async () => {
+   const path=dir+'/logs/access.log';
+   await writeFile(dir+'/journal.php',`<?php
+    require __DIR__.'/xray-journal.inc.php';
+    $file=fopen(XrayJournal::path('access'), 'ab');
+    ftruncate($file, 10 * 1024 * 1024);
+    XrayJournal::trim();
+    fwrite($file, "after trim");
+    fclose($file);
+   `);
+   const r=await run(dir+'/journal.php');
+   assert.equal(r.code,0,r.out+r.err);
+   assert.equal(await readFile(path,'utf8'),'after trim');
+  });
   const original=await runtime(),oldPid=await pid();
   await t.test('invalid core configuration leaves active PID/file untouched',async()=>{await config({...fixture,remarks:'reject-core'});const r=await run(dir+'/control.php',['reconfigure',id]);assert.equal(r.code,1,r.out);assert.equal(await runtime(),original);assert.equal(await pid(),oldPid);});
   await t.test('failed readiness restores previous configuration and starts it',async()=>{await config({...fixture,remarks:'fail-start'});const r=await run(dir+'/control.php',['restart',id]);assert.equal(r.code,1,r.out);assert.equal(await runtime(),original);assert.ok(await pid());assert.equal(JSON.parse(await readFile(dir+'/conf/active.json','utf8')).config_json,JSON.stringify(fixture));});
