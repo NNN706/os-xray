@@ -52,8 +52,8 @@ Subscriptions shows timestamped update results, and Boot still refreshes.
 Subscription entries contain statuses only.
 
 The plugin assigns private file paths in the effective runtime configuration
-and keeps the saved JSON. Xray's `none` level disables access logging and is
-rejected. Journal files are root-owned with mode 0600. The viewer returns the
+and keeps the saved JSON. When a provider sends `none`, the runtime uses
+`error` so Xray keeps writing the mandatory Access journal. Journal files are root-owned with mode 0600. The viewer returns the
 latest 64 KiB. The once-per-minute trim job clears each active journal at
 10 MiB or more in place. A burst can exceed that threshold between checks.
 

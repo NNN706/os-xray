@@ -134,7 +134,8 @@ final class XrayConfig
             throw new RuntimeException('Xray log settings must be an object');
         }
         if (strcasecmp((string)($config->log->loglevel ?? ''), 'none') === 0) {
-            throw new RuntimeException('Xray loglevel none disables access logging; choose debug, info, warning or error');
+            // Xray disables both journals at none. Keep the saved profile intact.
+            $config->log->loglevel = 'error';
         }
         $config->log->access = $access;
         $config->log->error = $error;

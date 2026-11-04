@@ -6,7 +6,11 @@ function verifySubscription(array $fixture): void
         || !is_file('/root/.os-xray-isolated-lab')) {
         throw new RuntimeException('Expected marked OPNsense lab');
     }
-    $download = XraySubscription::fetch($fixture['url'], $fixture['hwid']);
+    try {
+        $download = XraySubscription::fetch($fixture['url'], $fixture['hwid']);
+    } catch (Throwable $error) {
+        throw new RuntimeException('Download failed');
+    }
     if (count($download['configurations']) !== 13) {
         throw new RuntimeException('Expected 13 profiles from the test subscription');
     }
@@ -16,7 +20,9 @@ function verifySubscription(array $fixture): void
             XrayConfig::socks($config, '');
             XrayConfig::validate(XrayConfig::encode($config), true);
         } catch (Throwable $error) {
-            throw new RuntimeException('Profile ' . ($index + 1) . ' failed validation');
+            $reason = strtolower((string)($config->log->loglevel ?? '')) === 'none'
+                ? ' has logging disabled' : ' failed validation';
+            throw new RuntimeException('Profile ' . ($index + 1) . $reason);
         }
     }
     echo "PASS 13 subscription profiles fetched and validated on OPNsense\n";
