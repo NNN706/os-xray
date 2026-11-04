@@ -42,3 +42,17 @@ Use an isolated OPNsense/FreeBSD lab with console access and configuration/packa
 Record exact OPNsense, FreeBSD, Xray-core and tun2socks versions, results and failures before release. No target-platform PASS is recorded by this repository change.
 
 Heartbeat, ASN/CIDR policy, runner setup and explicit lab lifecycle checks: [HEARTBEAT.ru.md](HEARTBEAT.ru.md). The automated firewall adapter checks rollback and foreign-configuration invariants; target PF/data-plane acceptance remains required.
+
+### Import a subscription as separate hosts
+
+Open the profile dialog, expand **Import JSON / URL / VLESS**, enter the HTTPS
+subscription URL and, if required by the provider, its device ID. Click
+**Import all subscription profiles** and select the desired host from the
+Instances table. Each subscription item becomes a separate full Xray JSON
+profile. The import does not start or switch the tunnel. The existing
+**Import** button previews one item in the editor.
+
+Requests send the exact `User-Agent: OPNSense`. When a device ID is supplied,
+the backend sends it as `x-hwid` and requires a final URL without redirects.
+Re-importing the same content leaves existing profiles alone. A changed
+profile is added as a separate host. Scheduled refresh is off for new hosts.
