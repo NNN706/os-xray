@@ -71,6 +71,11 @@
     <type>text</type>
   </field>
   <field>
+    <id>instance.subscription_hwid</id>
+    <label>Subscription device ID</label>
+    <type>text</type>
+</field>
+<field>
     <id>instance.subscription_remarks</id>
     <label>subscription_remarks</label>
     <type>text</type>

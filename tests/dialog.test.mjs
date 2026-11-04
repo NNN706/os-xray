@@ -4,13 +4,19 @@ import {chromium} from 'playwright';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 const fixture=JSON.parse(await readFile('tests/full-config.json','utf8'));
-const fields=['config_json','use_config_dns','socks_inbound','subscription_url','subscription_hash','subscription_baseline','subscription_metadata','subscription_fetched','subscription_remarks','auto_update','update_mode','update_hours','name'];
+const fields=['config_json','use_config_dns','socks_inbound','subscription_url','subscription_hash','subscription_baseline','subscription_metadata','subscription_fetched','subscription_remarks','subscription_hwid','auto_update','update_mode','update_hours','name'];
 const id='11111111-1111-4111-8111-111111111111';
 test('Full configuration dialog, unsaved validation and subscription choices',async t=>{
  let lastValidation=null, preparedProfile=null, validationReply={result:"ok",message:"Effective configuration is valid"};
  const server=createServer(async(req,res)=>{
   if(req.url==='/') {res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<meta charset="utf-8"><style>table{width:100%;table-layout:fixed}#DialogInstance{display:block;width:100%}</style><link rel="stylesheet" href="/editor.css"><div id="DialogInstance" class="in"><div class="modal-body"><table>${fields.map(k=>`<tr><td>${k}</td><td>${k==='config_json'||k==='subscription_metadata'?`<textarea id="instance.${k}"></textarea>`:`<input id="instance.${k}" type="${['auto_update','use_config_dns'].includes(k)?'checkbox':'text'}">`}</td></tr>`).join('')}</table></div></div><script src="/jquery.js"></script><script src="/editor.js"></script><script>const originalMount=XrayEditor.mount;XrayEditor={...XrayEditor,mount:(...args)=>window.dialogEditor=originalMount(...args)};window.setInterval=fn=>{window.pollSubscription=fn;};</script><script src="/dialog.js"></script>`);return;}
   if(req.url==='/api/xray/service/validate'){let body='';for await(const chunk of req)body+=chunk;lastValidation=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify(validationReply));return;}
+  if(req.url==='/api/xray/instance/importSubscription'){
+   const parts=[]; for await(const chunk of req)parts.push(chunk);
+   const body=JSON.parse(Buffer.concat(parts));
+   res.setHeader('Content-Type','application/json');
+   res.end(JSON.stringify(body.hwid==='fixture-device' && body.url==='https://example.test/subscription' ? {result:'saved',added:13,total:13} : {result:'failed'}));return;
+  }
   if(req.url==='/api/xray/import/subscription'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',configurations:[{...fixture,remarks:'First'},{...fixture,remarks:'Second'}],metadata:{interval_hours:2,ping_type:'proxy-head',check_url:'https://example.test'},fetched_at:100}));return;}
   if(req.url==='/api/xray/instance/prepared/'+id){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result:'ok',profile:preparedProfile}));return;}
   if(req.url==='/api/xray/instance/getItem/'+id){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({instance:{config_json:JSON.stringify(fixture),subscription_hash:'',subscription_metadata:'{}',subscription_fetched:'0'}}));return;}
@@ -54,6 +60,15 @@ test('Full configuration dialog, unsaved validation and subscription choices',as
    assert.equal(await toggle.isDisabled(),true);
    assert.equal(await toggle.isChecked(),false);
    assert.match(await page.locator('#xray-update-reason').textContent(),/^No subscription URL/);
+  });
+  await t.test('batch import sends device ID and reports the number of saved hosts', async()=>{
+   await page.locator('#xray-import').click();
+   await page.locator('#xray-import-input').fill('https://example.test/subscription');
+   await page.locator('#xray-import-hwid').fill('fixture-device');
+   await page.locator('#xray-import-all').click();
+   await page.waitForFunction(()=>document.querySelector('#xray-import-status').textContent.startsWith('Added 13 of 13'));
+   await page.locator('#xray-import-hwid').fill('');
+   await page.locator('#xray-import').click();
   });
   await t.test('multiple URL profiles require an explicit choice by remarks',async()=>{
    const before = await page.evaluate(()=>dialogEditor.getValue());

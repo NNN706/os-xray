@@ -12,7 +12,7 @@ class ImportController extends ApiControllerBase
     {
         if (!$this->request->isPost()) { return ['result' => 'failed', 'message' => 'POST required']; }
         $body = $this->request->getJsonRawBody(true);
-        return XrayRequest::run('subscriptionfetch', ['url' => (string)($body['url'] ?? '')]);
+        return XrayRequest::run('subscriptionfetch', ['url' => (string)($body['url'] ?? ''), 'hwid' => (string)($body['hwid'] ?? '')]);
     }
 
     public function parseAction()

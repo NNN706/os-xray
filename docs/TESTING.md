@@ -56,3 +56,17 @@ and keeps the saved JSON. Xray's `none` level disables access logging and is
 rejected. Journal files are root-owned with mode 0600. The viewer returns the
 latest 64 KiB. The once-per-minute trim job clears each active journal at
 10 MiB or more in place. A burst can exceed that threshold between checks.
+
+### Import a subscription as separate hosts
+
+Open the profile dialog, expand **Import JSON / URL / VLESS**, enter the HTTPS
+subscription URL and, if required by the provider, its device ID. Click
+**Import all subscription profiles** and select the desired host from the
+Instances table. Each subscription item becomes a separate full Xray JSON
+profile. The import does not start or switch the tunnel. The existing
+**Import** button previews one item in the editor.
+
+Requests send the exact `User-Agent: OPNSense`. When a device ID is supplied,
+the backend sends it as `x-hwid` and requires a final URL without redirects.
+Re-importing the same content leaves existing profiles alone. A changed
+profile is added as a separate host. Scheduled refresh is off for new hosts.

@@ -33,17 +33,30 @@ final class XraySubscription
         } while (true);
     }
 
-    public static function fetch(string $url): array
+    public static function checkHwid(string $hwid): void
+    {
+        if ($hwid !== '' && !preg_match('/^[A-Za-z0-9._-]{1,128}$/D', $hwid)) {
+            throw new RuntimeException('Invalid subscription device ID');
+        }
+    }
+
+    public static function fetch(string $url, string $hwid = ''): array
     {
         self::url($url);
+        self::checkHwid($hwid);
         $dir = sys_get_temp_dir() . '/xray-fetch-' . bin2hex(random_bytes(16));
         if (!mkdir($dir, 0700)) { throw new RuntimeException('Cannot create fetch directory'); }
         try {
             $body = $dir . '/body'; $headers = $dir . '/headers';
             // URL travels over stdin, never argv/configd logs. curl owns one total deadline.
             $config = 'url = ' . json_encode($url, JSON_UNESCAPED_SLASHES) . "\n";
+            if ($hwid !== '') {
+                $config .= 'header = ' . json_encode('x-hwid: ' . $hwid) . "\n";
+            }
+            // curl forwards custom headers across redirects. Require the final HTTPS URL with a device ID.
+            $redirects = $hwid === '' ? '5' : '0';
             $pipes = [];
-            $process = proc_open(['/usr/local/bin/curl', '--disable', '--config', '-', '--silent', '--fail', '--location', '--max-redirs', '5', '--proto', '=https', '--proto-redir', '=https', '--max-time', '2', '--max-filesize', '4194304', '--user-agent', 'OPNSense', '--dump-header', $headers, '--output', $body], [0 => ['pipe', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null, ['PATH' => '/usr/local/bin:/usr/bin:/bin']);
+            $process = proc_open(['/usr/local/bin/curl', '--disable', '--config', '-', '--silent', '--fail', '--location', '--max-redirs', $redirects, '--proto', '=https', '--proto-redir', '=https', '--max-time', '2', '--max-filesize', '4194304', '--user-agent', 'OPNSense', '--dump-header', $headers, '--output', $body], [0 => ['pipe', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, null, ['PATH' => '/usr/local/bin:/usr/bin:/bin']);
             if (!is_resource($process)) { throw new RuntimeException('Cannot start subscription request'); }
             fwrite($pipes[0], $config); fclose($pipes[0]);
             $exit = self::waitForRequest($process, 2000);
