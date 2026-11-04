@@ -54,7 +54,10 @@ REMOTE
 )
 # Keep the SSH command on one line even when the remote login shell is csh.
 encoded=$(printf '%s' "$remote_install" | base64 -w0)
-install_command='/bin/sh -c 'code=$(printf %s "$1" | /usr/bin/openssl base64 -d -A) && shift && eval "$code"' sh'
+install_command=$(cat <<'REMOTE'
+/bin/sh -c 'code=$(printf %s "$1" | /usr/bin/openssl base64 -d -A) && shift && eval "$code"' sh
+REMOTE
+)
 check 'install candidate and verify installed version' "${lab[@]}" \
     "$install_command $encoded $digest $tag" < "$bundle/$archive"
 check 'repeat installation is noninteractive and idempotent' "${lab[@]}" \

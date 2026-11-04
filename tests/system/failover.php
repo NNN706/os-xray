@@ -54,12 +54,33 @@ function core_signal(string $signal, int $pid): void
     exec('/bin/kill -' . escapeshellarg($signal) . ' ' . $pid, $output, $status);
     if ($status !== 0) { throw new RuntimeException('Could not signal managed Xray'); }
 }
+function scheduleResume(int $pid, int $seconds): void
+{
+    global $id;
+    // The remote SSH session can disappear before PHP runs its finally block.
+    // This detached watchdog resumes only the same managed process.
+    $script = <<<'SH'
+sleep "$1"
+[ "$(cat "/var/run/xray_core_$3.pid" 2>/dev/null)" = "$2" ] || exit 0
+command=$(ps -ww -o command= -p "$2")
+case "$command" in
+    *"/usr/local/bin/xray-core"*"/usr/local/etc/xray-core/config-$3.json"*)
+        kill -CONT "$2" ;;
+esac
+SH;
+    exec('/usr/bin/nohup /bin/sh -c ' . escapeshellarg($script) . ' sh ' . $seconds . ' ' . $pid . ' '
+        . escapeshellarg($id) . ' </dev/null >/dev/null 2>&1 & echo $!', $output, $status);
+    if ($status !== 0 || !ctype_digit($output[0] ?? '')) {
+        throw new RuntimeException('Cannot schedule automatic resume');
+    }
+}
 $failed=false;$restore=false;
 $suspendedPid = null;
 try {
     wait_route('proxy',3*$settings['interval']+90);
     $pid = (int)trim(file_get_contents('/var/run/xray_core_' . $id . '.pid'));
     $after = time() + 1;
+    scheduleResume($pid, $settings['interval'] + 100);
     core_signal('STOP', $pid);
     $suspendedPid = $pid;
     wait_route('bypass', $settings['interval'] + 90, $after, true);
