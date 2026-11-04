@@ -11,8 +11,8 @@ archive="os-xray-$tag.tar.gz"
 digest=$(sha256sum "$bundle/$archive")
 digest=${digest%% *}
 
-# The runner account owns the alias, identity and pinned host key.
-lab=(ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=8 os-xray-lab)
+# The runner account owns the identity and pinned host key.
+lab=(ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=8 -- "${LAB_SSH_TARGET:?Missing private SSH target}")
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 check() {
@@ -29,10 +29,13 @@ check() {
     fi
 }
 
-check 'verified SSH, OPNsense and isolation marker' "${lab[@]}" '/bin/sh -s' <<'REMOTE'
+check 'verified noninteractive SSH' "${lab[@]}" true
+check 'root on OPNsense/FreeBSD' "${lab[@]}" '/bin/sh -s' <<'REMOTE'
 test "$(id -u)" = 0 &&
 test "$(uname -s)" = FreeBSD &&
-test -f /usr/local/etc/inc/config.inc &&
+test -f /usr/local/etc/inc/config.inc
+REMOTE
+check 'isolated test VM marker' "${lab[@]}" '/bin/sh -s' <<'REMOTE'
 test -f /root/.os-xray-isolated-lab &&
 test ! -L /root/.os-xray-isolated-lab &&
 test "$(stat -f "%u:%Lp" /root/.os-xray-isolated-lab)" = 0:600

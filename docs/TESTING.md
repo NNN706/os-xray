@@ -51,9 +51,10 @@ and lifecycle checks. The tag workflow publishes only when this job passes.
 Pull requests run portable tests on GitHub-hosted infrastructure. Keep write
 access to build branches restricted to trusted maintainers.
 
-Configure the `os-xray-lab` SSH alias, key authentication and independently
-verified host key for the **Actions service account** on the Debian runner.
-BatchMode must work for this account. Keep these settings on the runner.
+Store the SSH target in the `OS_XRAY_LAB_SSH_TARGET` GitHub Actions secret.
+Configure key authentication and an independently verified host key for the
+**Actions service account** on the Debian runner. BatchMode must work for
+this account. Keep the identity and host key on the runner.
 From the test VM console, confirm isolation and create the root-owned marker
 with `install -m 600 /dev/null /root/.os-xray-isolated-lab`. Keep a VM snapshot.
 An outbound path is needed for dependency installation and heartbeat.

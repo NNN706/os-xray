@@ -83,6 +83,8 @@ jobs:
           path: candidate/
           merge-multiple: true
       - name: Install and test the verified candidate on the isolated VM
+        env:
+          LAB_SSH_TARGET: ${{ secrets.OS_XRAY_LAB_SSH_TARGET }}
         run: bash tests/system/run-lab.sh candidate
   publish:
     name: Publish verified release
