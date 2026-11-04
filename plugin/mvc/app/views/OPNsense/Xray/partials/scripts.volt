@@ -271,20 +271,13 @@
                 success: function (data) {
                     var rows = (data && data.rows) ? data.rows : [];
                     var $diagSel = $('#diagInstanceSelect');
-                    var $logSel = $('#logInstanceSelect');
                     var savedDiag = $diagSel.val();
-                    var savedLog = $logSel.val();
                     $diagSel.empty();
-                    $logSel.empty();
                     $.each(rows, function (_, row) {
                         $diagSel.append($('<option></option>').val(row.uuid).text(row.name || row.uuid));
-                        $logSel.append($('<option></option>').val(row.uuid).text(row.name || row.uuid));
                     });
                     if (savedDiag && $diagSel.find('option[value="' + savedDiag + '"]').length) {
                         $diagSel.val(savedDiag);
-                    }
-                    if (savedLog && $logSel.find('option[value="' + savedLog + '"]').length) {
-                        $logSel.val(savedLog);
                     }
                 }
             });
@@ -337,17 +330,11 @@
         $('#diagInstanceSelect').on('change', function () {
             loadDiagnostics();
         });
-        $('#logInstanceSelect').on('change', function () {
-            loadLog("/api/xray/service/xraylog", 'logCoreContent', 'logCoreRefreshBtn');
-        });
-
         // ── Logs ────────────────────────────────────────────────────
         function loadLog(apiEndpoint, preId, btnId) {
-            var uuid = $('#logInstanceSelect').val();
-            var apiEndpointWithUuid = apiEndpoint + (uuid ? '/' + encodeURIComponent(uuid) : '');
             $('#' + btnId).prop('disabled', true);
             $('#' + preId).text("{{ lang._('Loading...') }}");
-            $.post(apiEndpointWithUuid, null, function (data) {
+            $.post(apiEndpoint, null, function (data) {
                 var text = (data && data.log) || "{{ lang._('Log is empty.') }}";
                 $('#' + preId).text(text);
                 $('#' + btnId).prop('disabled', false);
@@ -359,30 +346,25 @@
             });
         }
 
-        $('a[href="#logs"]').on('shown.bs.tab', function () {
-            var $active = $('#logSubTabs .active a');
-            var href = $active.attr('href');
-            if (href === '#logBoot') {
-                loadLog("/api/xray/service/log", 'logBootContent', 'logBootRefreshBtn');
-            } else if (href === '#logCore') {
-                loadLog("/api/xray/service/xraylog", 'logCoreContent', 'logCoreRefreshBtn');
+        var logEndpoints = {
+            Boot: '/api/xray/service/log',
+            Core: '/api/xray/service/xraylog',
+            Access: '/api/xray/service/xraylog/all/access',
+            Tunnel: '/api/xray/service/xraylog/all/tunnel',
+            Subscriptions: '/api/xray/service/xraylog/all/subscriptions'
+        };
+        function loadActiveJournal() {
+            var href = $('#logSubTabs .active a').attr('href') || '#logBoot';
+            var stream = href.slice(4);
+            if (logEndpoints[stream]) {
+                loadLog(logEndpoints[stream], 'log' + stream + 'Content', 'log' + stream + 'RefreshBtn');
             }
-        });
-
-        $('#logSubTabs a').on('shown.bs.tab', function (e) {
-            var href = $(e.target).attr('href');
-            if (href === '#logBoot') {
-                loadLog("/api/xray/service/log", 'logBootContent', 'logBootRefreshBtn');
-            } else if (href === '#logCore') {
-                loadLog("/api/xray/service/xraylog", 'logCoreContent', 'logCoreRefreshBtn');
-            }
-        });
-
-        $("#logBootRefreshBtn").click(function () {
-            loadLog("/api/xray/service/log", 'logBootContent', 'logBootRefreshBtn');
-        });
-        $("#logCoreRefreshBtn").click(function () {
-            loadLog("/api/xray/service/xraylog", 'logCoreContent', 'logCoreRefreshBtn');
+        }
+        $('a[href="#logs"], #logSubTabs a').on('shown.bs.tab', loadActiveJournal);
+        Object.keys(logEndpoints).forEach(function (stream) {
+            $('#log' + stream + 'RefreshBtn').on('click', function () {
+                loadLog(logEndpoints[stream], 'log' + stream + 'Content', 'log' + stream + 'RefreshBtn');
+            });
         });
 
         // ── Copy Debug Info ─────────────────────────────────────────

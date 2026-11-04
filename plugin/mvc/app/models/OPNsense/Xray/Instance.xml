@@ -66,6 +66,7 @@
             <use_config_dns type="BooleanField"><Required>N</Required><Default>1</Default></use_config_dns>
             <socks_inbound type="TextField"><Required>N</Required><Default></Default></socks_inbound>
             <subscription_url type="TextField"><Required>N</Required><Default></Default></subscription_url>
+            <subscription_hwid type="TextField"><Required>N</Required><Default></Default></subscription_hwid>
             <subscription_remarks type="TextField"><Required>N</Required><Default></Default></subscription_remarks>
             <subscription_metadata type="TextField"><Required>N</Required><Default>{}</Default></subscription_metadata>
             <subscription_baseline type="TextField"><Required>N</Required><Default></Default></subscription_baseline>

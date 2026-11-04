@@ -94,7 +94,7 @@ $(function () {
         $text.before($tools).after('<div id="xray-editor-diagnostics" role="status"></div>');
         editor = XrayEditor.mount($text[0], update);
         field('subscription_url').attr({type:'password', autocomplete:'off', spellcheck:'false', readonly:true});
-        ['subscription_hash','subscription_baseline','subscription_metadata','subscription_fetched','subscription_remarks'].forEach(k => field(k).closest('tr').hide());
+        ['subscription_hash','subscription_baseline','subscription_metadata','subscription_fetched','subscription_remarks','subscription_hwid'].forEach(k => field(k).closest('tr').hide());
         replaceSelect('health_interval', [['15','15 seconds'],['30','30 seconds'],['60','1 minute'],['120','2 minutes'],['300','5 minutes']]);
         replaceSelect('routing_mode', [['off','Off — diagnostics only'],['all','All traffic selected by enrolled rules'],['networks','Only destination ASN / CIDR']]);
         $.getJSON('/api/xray/service/routingOptions').done(data => {
@@ -108,7 +108,7 @@ $(function () {
         replaceSelect('update_mode', [['subscription','From Subscription'],['manual','Manual']]);
         replaceSelect('update_hours', Array.from({length:24}, (_,i) => [String(i+1), (i+1) + ' h']));
         field('auto_update').closest('td').append('<span id="xray-auto-state" style="margin-left:8px"></span><div id="xray-manual-warning" style="display:none" role="status">Конфигурация изменена вручную. При следующем успешном обновлении подписки изменения будут сброшены</div><div id="xray-update-reason" role="status"></div>');
-        $tools.after('<div id="xray-import-panel" hidden><textarea id="xray-import-input" placeholder="Full JSON, HTTPS subscription URL or vless:// link" spellcheck="false"></textarea><input id="xray-import-file" type="file" accept="application/json,.json"><button id="xray-import-read" type="button" class="btn btn-primary btn-sm">Import</button><select id="xray-import-choice" class="form-control" hidden></select><div id="xray-import-status" role="status"></div></div>');
+        $tools.after('<div id="xray-import-panel" hidden><textarea id="xray-import-input" placeholder="Full JSON, HTTPS subscription URL or vless:// link" spellcheck="false"></textarea><input id="xray-import-file" type="file" accept="application/json,.json"><button id="xray-import-read" type="button" class="btn btn-primary btn-sm">Import</button><label for="xray-import-hwid">Subscription device ID (optional)</label><input id="xray-import-hwid" class="form-control" type="password" autocomplete="off"><button id="xray-import-all" type="button" class="btn btn-default btn-sm">Import all subscription profiles</button><select id="xray-import-choice" class="form-control" hidden></select><div id="xray-import-status" role="status"></div></div>');
         $('#xray-format').on('click', () => { try { editor.format(); update(); } catch (_) { update(); } });
         $('#xray-import').on('click', () => { const p = document.getElementById('xray-import-panel'); p.hidden = !p.hidden; if (!p.hidden) $('#xray-import-input').trigger('focus'); });
         $('#xray-import-file').on('change', async function () { if (this.files[0]) $('#xray-import-input').val(await this.files[0].text()); });
@@ -137,14 +137,29 @@ $(function () {
                     if (response.status !== 'ok') throw new Error(response.message || 'VLESS import failed');
                     preview([JSON.parse(response.config_json)], null, null);
                 } else if (/^https:\/\//.test(value)) {
-                    const response = await post('/api/xray/import/subscription', {url:value});
+                    const hwid = $('#xray-import-hwid').val().trim();
+                    const response = await post('/api/xray/import/subscription', {url:value,hwid});
                     if (response.result !== 'ok') throw new Error(response.message || 'Subscription import failed');
-                    preview(response.configurations, response, value);
+                    preview(response.configurations, response, value, hwid);
                 } else {
                     const parsed = JSON.parse(value); preview(Array.isArray(parsed) ? parsed : [parsed], null, null);
                 }
             } catch (error) { status(error.responseJSON?.message || error.message || 'Import failed', true); }
             finally { $(this).prop('disabled',false); }
+        });
+        $('#xray-import-all').on('click', async function () {
+            const url = $('#xray-import-input').val().trim();
+            const hwid = $('#xray-import-hwid').val().trim();
+            if (!/^https:\/\//.test(url)) { status('Enter an HTTPS subscription URL.', true); return; }
+            const buttons = $('#xray-import-all,#xray-import-read').prop('disabled', true);
+            status('Importing subscription profiles…');
+            try {
+                const response = await post('/api/xray/instance/importSubscription', {url,hwid});
+                if (response.result !== 'saved') throw new Error(response.message || 'Subscription import failed');
+                if ($.fn.bootgrid) $('#grid-instances').bootgrid('reload');
+                status('Added ' + response.added + ' of ' + response.total + ' subscription profiles. Choose a host in the Instances table.');
+            } catch (error) { status(error.responseJSON?.message || error.message || 'Import failed', true); }
+            finally { buttons.prop('disabled', false); }
         });
         $dialog.on('change', 'input,select', function () {
             if (this.id.startsWith('instance.')) resetValidation();
@@ -152,7 +167,7 @@ $(function () {
         });
         $dialog.on('input', 'input[id^="instance."]', resetValidation);
     }
-    function preview(configs, download, url) {
+    function preview(configs, download, url, hwid = '') {
         if (!configs?.length || configs.some(c => !c || Array.isArray(c) || typeof c !== 'object' || !Array.isArray(c.outbounds) || !c.outbounds.length)) throw new Error('Expected full configuration object(s) with outbounds');
         const $choice = $('#xray-import-choice').empty().prop('hidden', configs.length < 2).off('change');
         const choose = index => {
@@ -161,7 +176,7 @@ $(function () {
             set('socks_inbound','');
             if (typeof name === 'string' && name.trim()) set('name',name);
             if (download) {
-                set('subscription_url',url); set('subscription_remarks', typeof name === 'string' ? name : '');
+                set('subscription_url',url); set('subscription_hwid',hwid); set('subscription_remarks', typeof name === 'string' ? name : '');
                 set('subscription_metadata',JSON.stringify(download.metadata || {})); set('subscription_baseline',JSON.stringify(config)); set('subscription_hash',XrayEditor.hash(config));
                 set('subscription_fetched', download.fetched_at); lastFetch = String(download.fetched_at);
             }
@@ -180,7 +195,7 @@ $(function () {
     $dialog.on('show.bs.modal', function () {
         init(); resetValidation(); opening = true; currentUuid = null; lastFetch = '';
         $('#xray-validation-result,#xray-import-status,#xray-editor-diagnostics').text('');
-        $('#xray-import-input').val(''); $('#xray-import-choice').empty().prop('hidden',true);
+        $('#xray-import-input,#xray-import-hwid').val(''); $('#xray-import-choice').empty().prop('hidden',true);
         $('#xray-import-panel').prop('hidden',true);
     });
     $dialog.on('shown.bs.modal', function () { if (!editor) return; if (opening) { editor.setValue(field('config_json').val() || '{}'); opening = false; update(); } editor.view.requestMeasure(); });

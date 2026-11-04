@@ -4,6 +4,7 @@ namespace OPNsense\Xray\Api;
 
 use OPNsense\Base\ApiMutableModelControllerBase;
 use OPNsense\Core\Backend;
+use OPNsense\Core\Config;
 use OPNsense\Base\UserException;
 require_once __DIR__ . '/XrayRequest.php';
 require_once '/usr/local/opnsense/scripts/Xray/xray-subscription.inc.php';
@@ -27,6 +28,7 @@ class InstanceController extends ApiMutableModelControllerBase
             $url = (string)$node->subscription_url;
             if ($url === '') { $node->auto_update = '0'; }
             if ($url !== '') { \XraySubscription::url($url); }
+            \XraySubscription::checkHwid((string)$node->subscription_hwid);
             $metadata = json_decode((string)$node->subscription_metadata ?: '{}', false, 16, JSON_THROW_ON_ERROR);
             if (!$metadata instanceof \stdClass) { throw new \RuntimeException('Invalid subscription metadata'); }
             $hours = $metadata->interval_hours ?? null;
@@ -94,6 +96,61 @@ class InstanceController extends ApiMutableModelControllerBase
             }
         }
         return $result;
+    }
+
+    public function importSubscriptionAction()
+    {
+        if (!$this->request->isPost()) { return ['result' => 'failed', 'message' => 'POST required']; }
+        $body = $this->request->getJsonRawBody(true);
+        $url = (string)($body['url'] ?? '');
+        $hwid = (string)($body['hwid'] ?? '');
+        $download = XrayRequest::run('subscriptionfetch', ['url' => $url, 'hwid' => $hwid]);
+        if (($download['result'] ?? '') !== 'ok') { return $download; }
+
+        $entries = [];
+        foreach ($download['configurations'] as $index => $item) {
+            $json = json_encode($item, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $config = \XrayConfig::decode($json);
+            $entries[] = [
+                'name' => \XrayConfig::name($config, 'Subscription profile ' . ($index + 1)),
+                'config_json' => $json,
+                'subscription_url' => $url,
+                'subscription_hwid' => $hwid,
+                'subscription_remarks' => \XrayConfig::name($config),
+                'subscription_baseline' => $json,
+                'subscription_metadata' => json_encode($download['metadata'], JSON_THROW_ON_ERROR),
+                'subscription_fetched' => (string)$download['fetched_at'],
+                'auto_update' => '0',
+            ];
+        }
+
+        $cfg = Config::getInstance();
+        $cfg->lock();
+        try {
+            $instances = $this->getModel()->instance;
+            $existing = [];
+            foreach ($instances->iterateItems() as $node) {
+                if ((string)$node->subscription_url === $url && (string)$node->subscription_hwid === $hwid) {
+                    $key = hash('sha256', (string)$node->subscription_baseline);
+                    $existing[$key] = ($existing[$key] ?? 0) + 1;
+                }
+            }
+            $added = 0;
+            foreach ($entries as $entry) {
+                $key = hash('sha256', $entry['subscription_baseline']);
+                if (($existing[$key] ?? 0) > 0) { --$existing[$key]; continue; }
+                $node = $instances->Add();
+                $node->setNodes($entry);
+                if (!empty($this->validate($node, 'instance')['validations'])) {
+                    return ['result' => 'failed', 'message' => 'A subscription profile cannot be saved'];
+                }
+                ++$added;
+            }
+            if ($added > 0) { $this->save(false, true); }
+            return ['result' => 'saved', 'added' => $added, 'total' => count($entries)];
+        } finally {
+            $cfg->unlock();
+        }
     }
 
     public function addItemAction()

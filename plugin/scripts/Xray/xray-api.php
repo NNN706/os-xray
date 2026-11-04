@@ -55,7 +55,7 @@ try {
             @unlink($path);
         }
         if ($action === 'fetch') {
-            echo json_encode(['result' => 'ok'] + XraySubscription::fetch($request['url'] ?? ''));
+            echo json_encode(['result' => 'ok'] + XraySubscription::fetch($request['url'] ?? '', $request['hwid'] ?? ''));
         } else {
             XrayConfig::validate($request['config_json'] ?? '', (bool)($request['use_config_dns'] ?? true));
             XrayConfig::socks(XrayConfig::decode($request['config_json']), (string)($request['socks_inbound'] ?? ''));

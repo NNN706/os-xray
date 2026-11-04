@@ -152,14 +152,16 @@ class ServiceController extends ApiMutableServiceControllerBase
     /**
      * BUG-5 FIX: POST-only.
      */
-    public function xraylogAction($uuid = '')
+    public function xraylogAction($uuid = '', $stream = 'core')
     {
         if (!$this->request->isPost()) {
             return ['result' => 'failed', 'message' => 'POST required'];
         }
         $backend = new Backend();
-        $uuid    = $this->sanitizeUuid((string)$uuid);
-        $output  = $backend->configdRun('xray xraylog' . ($uuid !== '' ? ' ' . $uuid : ''));
+        if (!in_array($stream, ['core', 'access', 'tunnel', 'subscriptions'], true)) {
+            return ['result' => 'failed', 'message' => 'Unknown log stream'];
+        }
+        $output = $backend->configdRun('xray xraylog ' . $stream);
         return ['log' => $output];
     }
 

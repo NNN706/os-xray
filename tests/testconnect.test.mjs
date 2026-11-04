@@ -30,7 +30,7 @@ test('Test through SOCKS with remote DNS, HEAD/GET, HTTP and timeout',async t=>{
     }
    }socket.on('data',consume);
   });await new Promise(r=>proxy.listen(0,'127.0.0.1',r));
-  for(const lib of ['xray-config.inc.php','xray-store.inc.php','xray-subscription.inc.php','xray-probe.inc.php'])await writeFile(dir+'/'+lib,(await readFile('plugin/scripts/Xray/'+lib,'utf8')).replace("'/usr/local/bin/curl'",JSON.stringify(dir+'/curl')));
+  for(const lib of ['xray-config.inc.php','xray-store.inc.php','xray-subscription.inc.php','xray-probe.inc.php','xray-journal.inc.php'])await writeFile(dir+'/'+lib,(await readFile('plugin/scripts/Xray/'+lib,'utf8')).replace("'/usr/local/bin/curl'",JSON.stringify(dir+'/curl')));
   await writeFile(dir+'/config.inc','<?php');
   await writeFile(dir+'/xray-process.inc.php','<?php final class XrayProcess { static function alive(...$args) {return true;} }');
   await writeFile(dir+'/curl','#!/bin/sh\nexec "'+curl+'" --cacert "'+dir+'/cert" "$@"\n',{mode:0o700});

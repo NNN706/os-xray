@@ -1,18 +1,25 @@
 #!/usr/local/bin/php
 <?php
-/**
- * xray-log.php — хвост per-instance лога xray-core.
- * Аргумент: UUID инстанса. Без UUID — выводит общий лог (fallback).
- */
-
-$uuid    = isset($argv[1]) ? preg_replace('/[^0-9a-fA-F\-]/', '', trim($argv[1])) : '';
-$perInst = $uuid !== '' ? "/var/log/xray-core-{$uuid}.log" : '';
-$logfile = ($perInst !== '' && file_exists($perInst)) ? $perInst : '/var/log/xray-core.log';
-
-if (!file_exists($logfile)) {
-    echo "(log file not found: {$logfile})\n";
-    exit(0);
+require_once __DIR__ . '/xray-journal.inc.php';
+try {
+    $stream = $argv[1] ?? 'core';
+    if ($stream === 'trim') {
+        XrayJournal::trim();
+        exit;
+    }
+    $path = XrayJournal::path($stream);
+    XrayJournal::prepare();
+    $file = fopen($path, 'r');
+    try {
+        $offset = max(0, fstat($file)['size'] - 65536);
+        fseek($file, $offset);
+        $text = stream_get_contents($file, 65536);
+        if ($offset > 0 && ($newline = strpos($text, "\n")) !== false) {
+            $text = substr($text, $newline + 1);
+        }
+        echo $text;
+    } finally { fclose($file); }
+} catch (Throwable $error) {
+    echo "Xray journal unavailable\n";
+    exit(1);
 }
-
-exec('/usr/bin/tail -n 200 ' . escapeshellarg($logfile), $out);
-echo implode("\n", $out) . "\n";

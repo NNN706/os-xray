@@ -61,6 +61,7 @@ function xray_cron(): array
         ['autocron' => ['/usr/local/sbin/configctl xray schedule', '*']],
         ['autocron' => ['/usr/local/sbin/configctl xray watchdog', '*']],
         ['autocron' => ['/usr/local/sbin/configctl xray heartbeat', '*']],
+        ['autocron' => ['/usr/local/sbin/configctl xray trimlogs', '*']],
     ];
 }
 
