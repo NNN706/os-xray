@@ -64,10 +64,30 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 30
+  lab:
+    name: OPNsense acceptance
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: [self-hosted, linux, x64, os-xray-build]
+    concurrency:
+      group: opnsense-isolated-lab
+      cancel-in-progress: false
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: candidate/
+          merge-multiple: true
+      - name: Install and test the verified candidate on the isolated VM
+        run: bash tests/system/run-lab.sh candidate
   publish:
     name: Publish verified release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, lab]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

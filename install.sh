@@ -83,7 +83,16 @@ if [ "${1:-}" = "uninstall" ]; then
     echo "Plugin removed. Saved profiles, applied snapshots and core binaries retained."
     exit 0
 fi
-[ -z "${1:-}" ] || die "Usage: sh install.sh [uninstall | --release vVERSION]"
+lab_upgrade=no
+if [ "${1:-}" = --isolated-lab-upgrade ] && [ "$#" = 1 ]; then
+    marker=/root/.os-xray-isolated-lab
+    [ -f "$marker" ] && [ ! -L "$marker" ] &&
+        [ "$(stat -f '%u:%Lp' "$marker")" = 0:600 ] ||
+        die "Missing private root-owned isolated lab marker."
+    lab_upgrade=yes
+else
+    [ "$#" = 0 ] || die "Usage: sh install.sh [uninstall | --release vVERSION]"
+fi
 [ -s "$PLUGIN_DIR/www/assets/xray/editor.js" ] || die "Bundled editor missing; build the release with npm ci && npm run build."
 [ ! -L /var/tmp/xray-api ] || die "Private API directory must not be a symlink."
 
@@ -144,12 +153,14 @@ if [ -s "$stage/conflicts" ]; then
     cat "$stage/conflicts"
     echo "Proposed action: back up the listed files and OPNsense config, then replace only the listed os-xray files and install any missing plugin files."
     echo "Existing Xray/tun2socks binaries, profiles and interface assignments are retained."
-    if ! ( : </dev/tty ) 2>/dev/null; then
-        die "Interactive confirmation is required. Rerun from an SSH or local console."
+    if [ "$lab_upgrade" = no ]; then
+        if ! ( : </dev/tty ) 2>/dev/null; then
+            die "Interactive confirmation is required. Rerun from an SSH or local console."
+        fi
+        printf 'Back up and replace these os-xray files? [y/N] '
+        read -r answer </dev/tty || die "No confirmation received."
+        case "$answer" in y|Y|yes|YES) ;; *) echo "Cancelled; no installation files changed."; exit 0 ;; esac
     fi
-    printf 'Back up and replace these os-xray files? [y/N] '
-    read -r answer </dev/tty || die "No confirmation received."
-    case "$answer" in y|Y|yes|YES) ;; *) echo "Cancelled; no installation files changed."; exit 0 ;; esac
     backup=$(mktemp -d /root/os-xray-backup.XXXXXX) || die "Cannot create backup."
     while IFS= read -r target; do
         install -d -m 0700 "$backup$(dirname "$target")"

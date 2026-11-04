@@ -42,3 +42,32 @@ Use an isolated OPNsense/FreeBSD lab with console access and configuration/packa
 Record exact OPNsense, FreeBSD, Xray-core and tun2socks versions, results and failures before release. No target-platform PASS is recorded by this repository change.
 
 Heartbeat, ASN/CIDR policy, runner setup and explicit lab lifecycle checks: [HEARTBEAT.ru.md](HEARTBEAT.ru.md). The automated firewall adapter checks rollback and foreign-configuration invariants; target PF/data-plane acceptance remains required.
+
+### Automatic OPNsense acceptance
+
+A push to a build branch or a version tag builds the exact candidate, transfers
+it over verified SSH, runs its installer twice, then runs installation, policy
+and lifecycle checks. The tag workflow publishes only when this job passes.
+Pull requests run portable tests on GitHub-hosted infrastructure. Keep write
+access to build branches restricted to trusted maintainers.
+
+Configure the `os-xray-lab` SSH alias, key authentication and independently
+verified host key for the **Actions service account** on the Debian runner.
+BatchMode must work for this account. Keep these settings on the runner.
+From the test VM console, confirm isolation and create the root-owned marker
+with `install -m 600 /dev/null /root/.os-xray-isolated-lab`. Keep a VM snapshot.
+An outbound path is needed for dependency installation and heartbeat.
+
+Apply a disposable profile with heartbeat and managed WAN bypass, a test-only
+firewall rule, and existing lab gateways. The lifecycle suite interrupts the
+test tunnel and checks recovery and protected system configuration. Never put
+the marker on a production router.
+
+The job also requires an executable at
+`~/.config/os-xray/lab-acceptance` on the runner. It receives the candidate tag
+as its only argument and must check the live web UI and traffic from an
+independent LAN client in proxy, bypass and recovery phases. Provision that
+harness with lab-only fixtures and credentials on the runner. Missing
+prerequisites or failed checks block publication. Public logs report only
+phase status. The runner retains the latest failure privately at
+`~/.local/state/os-xray/last-lab-failure.log`.
