@@ -5,6 +5,7 @@ if (getenv('XRAY_ISOLATED_LAB') !== 'YES' || PHP_OS_FAMILY !== 'BSD') { fwrite(S
 set_include_path('/usr/local/etc/inc'.PATH_SEPARATOR.get_include_path());
 require_once 'config.inc';
 require_once '/usr/local/opnsense/scripts/Xray/xray-health.inc.php';
+require_once '/usr/local/opnsense/scripts/Xray/xray-process.inc.php';
 $active=json_decode(file_get_contents('/usr/local/etc/xray-core/active.json'),true,128,JSON_THROW_ON_ERROR);
 $settings=XrayHealth::settings($active);
 if(!$settings['enabled'] || !$settings['fallback']) { throw new RuntimeException('Apply a lab profile with heartbeat and managed WAN bypass first'); }
@@ -33,24 +34,48 @@ function defaults() {
 $defaultRoutes=defaults();
 $files=[];foreach(['/etc/rc.conf','/usr/local/etc/unbound/unbound.conf'] as $p)if(is_file($p))$files[$p]=hash_file('sha256',$p);
 function action($action) { global $id; exec('/usr/local/sbin/configctl xray '.$action.' '.escapeshellarg($id).' >/dev/null 2>&1',$out,$rc); if($rc)throw new RuntimeException('Lifecycle action failed: '.$action); }
-function wait_route($wanted,$timeout) {
+function wait_route($wanted,$timeout,$after=0,$requireTimeout=false) {
     global $id;
     $deadline=hrtime(true)+$timeout*1000000000;
     do { clearstatcache();$file='/var/run/xray-health/'.$id.'.json';$s=is_file($file)?json_decode(file_get_contents($file),true):null;
-        if($s && ($s['route']??'')===$wanted && empty($s['routing_error']) && ($wanted!=='proxy'||($s['successes']??0)>=3)){echo 'PASS observed '.$wanted."\n";return;}
+        if($s && ($s['checked_at']??0)>=$after && (!$requireTimeout || ($s['probe']['timed_out']??false)===true) && ($s['route']??'')===$wanted && empty($s['routing_error']) && ($wanted!=='proxy'||($s['successes']??0)>=3)){echo 'PASS observed '.$wanted."\n";return;}
         usleep(250000);
     }while(hrtime(true)<$deadline);
     throw new RuntimeException('Timed out waiting for '.$wanted);
 }
+function core_signal(string $signal, int $pid): void
+{
+    global $id;
+    $pidfile = '/var/run/xray_core_' . $id . '.pid';
+    if (!XrayProcess::alive($pidfile, '/usr/local/bin/xray-core', '/usr/local/etc/xray-core/config-' . $id . '.json')
+        || (int)trim(file_get_contents($pidfile)) !== $pid) {
+        throw new RuntimeException('Cannot verify managed Xray process identity');
+    }
+    exec('/bin/kill -' . escapeshellarg($signal) . ' ' . $pid, $output, $status);
+    if ($status !== 0) { throw new RuntimeException('Could not signal managed Xray'); }
+}
 $failed=false;$restore=false;
+$suspendedPid = null;
 try {
     wait_route('proxy',3*$settings['interval']+90);
+    $pid = (int)trim(file_get_contents('/var/run/xray_core_' . $id . '.pid'));
+    $after = time() + 1;
+    core_signal('STOP', $pid);
+    $suspendedPid = $pid;
+    wait_route('bypass', $settings['interval'] + 90, $after, true);
+    core_signal('CONT', $pid);
+    $suspendedPid = null;
+    wait_route('proxy', 3 * $settings['interval'] + 90, time() + 1);
     $restore=true; action('stop');
     wait_route('bypass',$settings['interval']+90);
     action('start');
     wait_route('proxy',3*$settings['interval']+90);$restore=false;
 } catch(Throwable $error) { $failed=true;fwrite(STDERR,'FAIL '.$error->getMessage()."\n"); }
 finally {
+    if ($suspendedPid !== null) {
+        try { core_signal('CONT', $suspendedPid); }
+        catch (Throwable $error) { $failed=true; fwrite(STDERR,"FAIL suspended Xray restoration; use lab console\n"); }
+    }
     if($restore)try{action('start');}catch(Throwable $error){$failed=true;fwrite(STDERR,"FAIL restoration; use lab console\n");}
     OPNsense\Core\Config::getInstance()->forceReload();
     if(protected_hash(OPNsense\Core\Config::getInstance()->object())!==$baseline){$failed=true;fwrite(STDERR,"FAIL unrelated configuration changed\n");}
