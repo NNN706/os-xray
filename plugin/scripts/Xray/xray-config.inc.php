@@ -126,9 +126,24 @@ final class XrayConfig
         }
     }
 
+    public static function withJournalPaths(string $json, string $access, string $error): string
+    {
+        $config = self::decode($json);
+        $config->log ??= new stdClass();
+        if (!$config->log instanceof stdClass) {
+            throw new RuntimeException('Xray log settings must be an object');
+        }
+        if (strcasecmp((string)($config->log->loglevel ?? ''), 'none') === 0) {
+            throw new RuntimeException('Xray loglevel none disables access logging; choose debug, info, warning or error');
+        }
+        $config->log->access = $access;
+        $config->log->error = $error;
+        return self::encode($config);
+    }
+
     public static function validate(string $json, bool $dns, string $binary = '/usr/local/bin/xray-core'): void
     {
-        $effective = self::effective($json, $dns);
+        $effective = self::withJournalPaths(self::effective($json, $dns), '', '');
         if (!is_executable($binary)) {
             throw new RuntimeException('Installed Xray-core is unavailable');
         }

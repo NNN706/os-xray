@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/xray-subscription.inc.php';
+require_once __DIR__ . '/xray-journal.inc.php';
 final class XrayStore
 {
     const DIR = '/usr/local/etc/xray-core/profiles';
@@ -89,7 +90,9 @@ final class XrayStore
                 self::write($uuid, 'prepared', ['source_hash' => $current['source_hash'], 'config_json' => $json, 'name' => XrayConfig::name($config, $current['name']), 'metadata' => $download['metadata'], 'subscription_baseline' => $json, 'subscription_hash' => hash('sha256', XrayConfig::canonical($config)), 'fetched_at' => $download['fetched_at']]);
             } finally { $configLock->unlock(); }
             self::write($uuid, 'subscription', ['result' => 'ok', 'message' => 'Downloaded; Apply or reconnect to activate', 'checked_at' => time()]);
+            XrayJournal::subscriptionResult(true);
         } catch (Throwable $error) {
+            XrayJournal::subscriptionResult(false);
             // Never persist exception text from JSON/core/network libraries (may contain secrets).
             self::write($uuid, 'subscription', ['result' => 'failed', 'message' => 'Update rejected; previous prepared and applied configurations retained', 'checked_at' => time()]);
         } finally { flock($lock, LOCK_UN); fclose($lock); }

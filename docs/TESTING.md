@@ -42,3 +42,17 @@ Use an isolated OPNsense/FreeBSD lab with console access and configuration/packa
 Record exact OPNsense, FreeBSD, Xray-core and tun2socks versions, results and failures before release. No target-platform PASS is recorded by this repository change.
 
 Heartbeat, ASN/CIDR policy, runner setup and explicit lab lifecycle checks: [HEARTBEAT.ru.md](HEARTBEAT.ru.md). The automated firewall adapter checks rollback and foreign-configuration invariants; target PF/data-plane acceptance remains required.
+
+### Runtime journals on OPNsense
+
+Start a disposable profile with `"log": {"loglevel": "debug"}` and send an
+HTTPS request through its SOCKS inbound. In Logs, verify Access shows the
+request and Core shows Xray diagnostics. Verify Tunnel shows tun2socks output,
+Subscriptions shows timestamped update results, and Boot still refreshes.
+Subscription entries contain statuses only.
+
+The plugin assigns private file paths in the effective runtime configuration
+and keeps the saved JSON. Xray's `none` level disables access logging and is
+rejected. Journal files are root-owned with mode 0600. The viewer returns the
+latest 64 KiB. The once-per-minute trim job clears each active journal at
+10 MiB or more in place. A burst can exceed that threshold between checks.

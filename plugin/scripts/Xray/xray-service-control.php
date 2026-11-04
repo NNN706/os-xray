@@ -3,6 +3,7 @@
 set_include_path('/usr/local/etc/inc' . PATH_SEPARATOR . get_include_path());
 require_once 'config.inc';
 require_once __DIR__ . '/xray-store.inc.php';
+require_once __DIR__ . '/xray-journal.inc.php';
 require_once __DIR__ . '/xray-process.inc.php';
 require_once __DIR__ . '/xray-health.inc.php';
 require_once __DIR__ . '/xray-routing.inc.php';
@@ -54,10 +55,9 @@ function proc_kill(string $pidfile): void
     @unlink($pidfile);
 }
 
-function proc_start(string $bin, string $args, string $pidfile, string $logfile = ''): void
+function proc_start(string $bin, string $args, string $pidfile, string $logfile): void
 {
-    // Keep core output private: startup diagnostics may contain credentials.
-    $log = escapeshellarg('/dev/null');
+    $log = escapeshellarg($logfile);
     exec('/usr/sbin/daemon -p ' . escapeshellarg($pidfile)
        . ' ' . escapeshellarg($bin) . ' ' . $args . ' >> ' . $log . ' 2>&1');
 }
@@ -79,7 +79,11 @@ function prepare_profile(array $c): array
     $config = XrayConfig::decode($c['config_json']);
     $socks = XrayConfig::socks($config, $c['socks_inbound']);
     XrayConfig::validate($c['config_json'], $c['use_config_dns']);
-    $c['effective_json'] = XrayConfig::effective($c['config_json'], $c['use_config_dns']);
+    $c['effective_json'] = XrayConfig::withJournalPaths(
+        XrayConfig::effective($c['config_json'], $c['use_config_dns']),
+        XrayJournal::path('access'),
+        XrayJournal::path('core')
+    );
     $c['socks'] = $socks;
     $host = strpos($socks['host'], ':') !== false ? '[' . $socks['host'] . ']' : $socks['host'];
     $c['tun_yaml'] = 'proxy: socks5://' . $host . ':' . $socks['port'] . "\n" . 'device: ' . $c['tun_iface'] . "\nmtu: " . $c['mtu'] . "\nloglevel: error\n";
@@ -113,10 +117,12 @@ function resources(array $c, ?array $old): void
 function launch_profile(array $c): void
 {
     $id = $c['inst_uuid'];
-    XrayConfig::atomic(xray_conf_path($id), $c['effective_json']);
+    XrayJournal::trim();
+    $runtime = XrayConfig::withJournalPaths($c['effective_json'], XrayJournal::path('access'), XrayJournal::path('core'));
+    XrayConfig::atomic(xray_conf_path($id), $runtime);
     XrayConfig::atomic(t2s_conf_path($id), $c['tun_yaml']);
-    proc_start(XRAY_BIN, 'run -c ' . escapeshellarg(xray_conf_path($id)), xray_pid_path($id));
-    proc_start(T2S_BIN, '--config ' . escapeshellarg(t2s_conf_path($id)), t2s_pid_path($id));
+    proc_start(XRAY_BIN, 'run -c ' . escapeshellarg(xray_conf_path($id)), xray_pid_path($id), XrayJournal::path('core'));
+    proc_start(T2S_BIN, '--config ' . escapeshellarg(t2s_conf_path($id)), t2s_pid_path($id), XrayJournal::path('tunnel'));
     $host = $c['socks']['host'];
     $host = strpos($host, ':') !== false ? '[' . $host . ']' : $host;
     for ($i = 0; $i < 50; $i++) {

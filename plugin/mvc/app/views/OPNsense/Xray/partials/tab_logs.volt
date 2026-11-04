@@ -19,6 +19,9 @@
                             <i class="fa fa-file-text-o fa-fw"></i> {{ lang._('Core Log') }}
                         </a>
                     </li>
+                    <li><a data-toggle="tab" href="#logAccess">{{ lang._('Access') }}</a></li>
+                    <li><a data-toggle="tab" href="#logTunnel">{{ lang._('Tunnel') }}</a></li>
+                    <li><a data-toggle="tab" href="#logSubscriptions">{{ lang._('Subscriptions') }}</a></li>
                 </ul>
 
             </div>
@@ -51,16 +54,7 @@
                         <button id="logCoreRefreshBtn" class="btn btn-sm btn-default">
                             <i class="fa fa-refresh fa-fw"></i> {{ lang._('Refresh') }}
                         </button>
-                        <div class="input-group input-group-sm" style="min-width: 200px; width: auto;">
-                            <span class="input-group-addon">
-                                <i class="fa fa-server fa-fw"></i>
-                            </span>
-                            <select id="logInstanceSelect" class="form-control">
-                            </select>
-                        </div>
-                        <span class="text-muted" style="font-size: 12px;">
-                            {{ lang._('/var/log/xray-core-{uuid}.log — last 200 lines') }}
-                        </span>
+                        <span class="text-muted">{{ lang._('Latest 64 KiB. Set log.loglevel in Xray JSON.') }}</span>
                     </div>
                     <pre id="logCoreContent"
                          style="min-height: 300px; max-height: 550px; overflow-y: auto;
@@ -69,6 +63,24 @@
                                 border: 1px solid #444;">{{ lang._('Click "Core Log" to load.') }}</pre>
                 </div>
 
+
+                <div id="logAccess" class="tab-pane fade" style="padding-top: 10px;">
+                    <button id="logAccessRefreshBtn" class="btn btn-sm btn-default">{{ lang._('Refresh') }}</button>
+                    <span class="text-muted">{{ lang._('Latest 64 KiB') }}</span>
+                    <pre id="logAccessContent" style="min-height: 300px; max-height: 550px; overflow: auto;">{{ lang._('Switch to this tab to load log.') }}</pre>
+                </div>
+
+                <div id="logTunnel" class="tab-pane fade" style="padding-top: 10px;">
+                    <button id="logTunnelRefreshBtn" class="btn btn-sm btn-default">{{ lang._('Refresh') }}</button>
+                    <span class="text-muted">{{ lang._('Latest 64 KiB') }}</span>
+                    <pre id="logTunnelContent" style="min-height: 300px; max-height: 550px; overflow: auto;">{{ lang._('Switch to this tab to load log.') }}</pre>
+                </div>
+
+                <div id="logSubscriptions" class="tab-pane fade" style="padding-top: 10px;">
+                    <button id="logSubscriptionsRefreshBtn" class="btn btn-sm btn-default">{{ lang._('Refresh') }}</button>
+                    <span class="text-muted">{{ lang._('Latest 64 KiB') }}</span>
+                    <pre id="logSubscriptionsContent" style="min-height: 300px; max-height: 550px; overflow: auto;">{{ lang._('Switch to this tab to load log.') }}</pre>
+                </div>
             </div>
         </section>
     </div>
